@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { authAPI } from '../services/api';
 import { generateKeyPair } from '../utils/encryption';
-import { Box, Typography, Paper, Alert, CircularProgress, Container, Stack } from '@mui/material';
+import { Box, Typography, Paper, Alert, CircularProgress, Container, Stack, IconButton } from '@mui/material';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import LockIcon from '@mui/icons-material/Lock';
 import ShieldIcon from '@mui/icons-material/Shield';
 import MessageIcon from '@mui/icons-material/Message';
@@ -15,26 +16,29 @@ export default function Login() {
     const { login } = useAuth();
     const navigate = useNavigate();
 
-    // This gets called with a `credential` (idToken) after Google popup resolves
+    // Called after user successfully picks their Google account in the popup.
+    // With flow:'implicit', tokenResponse contains { access_token, ... } — NOT credential.
+    // We send the access_token to the backend which calls Google's userinfo endpoint.
     const handleGoogleSuccess = async (tokenResponse) => {
         setLoading(true);
         setError('');
         try {
-            // tokenResponse.credential is the Google ID token (JWT)
-            const idToken = tokenResponse.credential;
+            const accessToken = tokenResponse.access_token;
 
-            // Generate RSA key pair client-side — private key never leaves the browser
+            if (!accessToken) throw new Error('No access token received from Google.');
+
+            // Generate RSA-2048 key pair client-side — private key NEVER leaves the browser
             const keys = await generateKeyPair();
 
-            // Send the real idToken + our public key to the backend
+            // Send access_token + public key to backend
             const res = await authAPI.loginWithGoogle({
-                token: idToken,
+                token: accessToken,
                 publicKey: keys.publicKey,
             });
 
-            // Store JWT, user data, and private key locally
+            // Persist JWT, user, and private key locally
             login(res.data.user, res.data.token, keys.privateKey);
-            navigate('/');
+            navigate('/chat');
         } catch (err) {
             console.error(err);
             const msg = err?.response?.data || 'Login failed. Please try again.';
@@ -44,12 +48,15 @@ export default function Login() {
         }
     };
 
-    // useGoogleLogin uses the One Tap / popup flow — credential is the idToken
+    // useGoogleLogin (implicit flow) opens a Google popup and returns an access_token
     const googleLogin = useGoogleLogin({
         onSuccess: handleGoogleSuccess,
-        onError: () => setError('Google sign-in was cancelled or failed.'),
-        flow: 'implicit',         // returns credential (idToken) directly
-        ux_mode: 'popup',        // opens a popup instead of redirecting
+        onError: (err) => {
+            console.error('Google OAuth error:', err);
+            setError('Google sign-in was cancelled or failed. Please try again.');
+        },
+        flow: 'implicit',
+        scope: 'email profile openid',
     });
 
     return (
@@ -63,8 +70,16 @@ export default function Login() {
                 p: 2,
                 // Subtle radial glow background
                 background: 'radial-gradient(ellipse at 50% 50%, rgba(0,229,255,0.06) 0%, #050a15 70%)',
+                position: 'relative',
             }}
         >
+            {/* Back to Welcome */}
+            <IconButton
+                onClick={() => navigate('/')}
+                sx={{ position: 'absolute', top: 20, left: 20, color: 'text.secondary', '&:hover': { color: 'primary.main' } }}
+            >
+                <ArrowBackIcon />
+            </IconButton>
             <Container maxWidth="xs">
                 <Paper
                     elevation={12}
