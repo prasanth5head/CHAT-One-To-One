@@ -1,10 +1,18 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useChat } from '../context/ChatContext';
-import { LogOut, Settings, Moon, Sun, Search, Paperclip, Smile, Send, Mic, MapPin, File, Image } from 'lucide-react';
 import { userAPI } from '../services/api';
+import { Box, Typography, TextField, IconButton, List, ListItem, ListItemAvatar, ListItemText, Avatar, Paper, InputAdornment, Badge } from '@mui/material';
+import SearchIcon from '@mui/icons-material/Search';
+import SendIcon from '@mui/icons-material/Send';
+import ExitToAppIcon from '@mui/icons-material/ExitToApp';
+import GroupIcon from '@mui/icons-material/Group';
+import PersonIcon from '@mui/icons-material/Person';
+import SettingsIcon from '@mui/icons-material/Settings';
+import AttachFileIcon from '@mui/icons-material/AttachFile';
+import LockIcon from '@mui/icons-material/Lock';
 
-export default function ChatPage({ toggleTheme, theme }) {
+export default function ChatPage() {
     const { user, logout } = useAuth();
     const { chats, activeChat, messages, selectChat, sendMessage, loadChats, sendTyping, typingUsers, createChat } = useChat();
 
@@ -14,12 +22,8 @@ export default function ChatPage({ toggleTheme, theme }) {
 
     const messagesEndRef = useRef(null);
 
-    const scrollToBottom = () => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    };
-
     useEffect(() => {
-        scrollToBottom();
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages]);
 
     const handleSearch = async (e) => {
@@ -50,192 +54,210 @@ export default function ChatPage({ toggleTheme, theme }) {
     const handleTyping = (e) => {
         setMsgInput(e.target.value);
         sendTyping(true);
-        // basic debounce to stop typing
         setTimeout(() => {
-            sendTyping(false);
+            sendTyping(false); // Debounce
         }, 2000);
     };
 
     return (
-        <div className="flex w-full h-screen overflow-hidden bg-background">
+        <Box sx={{ display: 'flex', height: '100vh', bgcolor: 'background.default' }}>
 
             {/* Sidebar */}
-            <div className="w-1/4 h-full border-r border-border flex flex-col pt-4 pb-0 bg-secondary/30">
+            <Box sx={{ width: 320, borderRight: '1px solid rgba(0,229,255,0.1)', display: 'flex', flexDirection: 'column', bgcolor: 'background.paper', zIndex: 2 }}>
 
                 {/* Header */}
-                <div className="flex items-center justify-between px-4 mb-4">
-                    <div className="flex items-center gap-3">
-                        <img src={user.avatar || `https://ui-avatars.com/api/?name=${user.name}`} alt="Profile" className="w-10 h-10 rounded-full" />
-                        <div>
-                            <h3 className="font-semibold text-sm">{user.name}</h3>
-                            <p className="text-xs text-green-500">Online</p>
-                        </div>
-                    </div>
-                    <div className="flex gap-2 text-muted-foreground">
-                        <button onClick={toggleTheme} className="p-2 hover:bg-muted rounded-full">
-                            {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
-                        </button>
-                        <button onClick={logout} className="p-2 hover:bg-muted rounded-full text-red-400">
-                            <LogOut size={18} />
-                        </button>
-                    </div>
-                </div>
+                <Box sx={{ p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid rgba(0,229,255,0.1)' }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                        <Badge overlap="circular" anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }} variant="dot" color="success">
+                            <Avatar src={user.avatar || `https://ui-avatars.com/api/?name=${user.name}`} sx={{ border: '2px solid rgba(0,229,255,0.5)' }} />
+                        </Badge>
+                        <Box>
+                            <Typography variant="subtitle2" fontWeight="bold">{user.name}</Typography>
+                            <Typography variant="caption" sx={{ color: '#00e5ff', textShadow: '0 0 5px rgba(0,229,255,0.5)' }}>Online</Typography>
+                        </Box>
+                    </Box>
+                    <IconButton onClick={logout} size="small" sx={{ color: 'error.main', '&:hover': { bgcolor: 'error.dark', color: '#fff', boxShadow: '0 0 10px red' } }}>
+                        <ExitToAppIcon fontSize="small" />
+                    </IconButton>
+                </Box>
 
                 {/* Search */}
-                <div className="px-4 mb-4">
-                    <div className="relative">
-                        <Search size={16} className="absolute left-3 top-2.5 text-muted-foreground" />
-                        <input
-                            type="text"
-                            placeholder="Search users by email..."
-                            value={searchEmail}
-                            onChange={handleSearch}
-                            className="w-full bg-input rounded-full pl-10 pr-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                        />
-                    </div>
+                <Box sx={{ p: 2, position: 'relative' }}>
+                    <TextField
+                        fullWidth
+                        size="small"
+                        placeholder="Search users by email..."
+                        value={searchEmail}
+                        onChange={handleSearch}
+                        InputProps={{
+                            startAdornment: (
+                                <InputAdornment position="start">
+                                    <SearchIcon fontSize="small" color="primary" />
+                                </InputAdornment>
+                            ),
+                            sx: { borderRadius: 6, bgcolor: 'rgba(0,0,0,0.3)' }
+                        }}
+                    />
 
                     {/* Search Results */}
                     {searchResults.length > 0 && (
-                        <div className="absolute top-32 left-4 w-64 bg-background border border-border shadow-lg rounded-xl z-50 overflow-hidden">
-                            {searchResults.map(u => (
-                                <div key={u.id} className="flex items-center p-3 hover:bg-muted cursor-pointer gap-3" onClick={() => handleCreateChat(u)}>
-                                    <img src={u.avatar || `https://ui-avatars.com/api/?name=${u.name}`} alt="avatar" className="w-8 h-8 rounded-full" />
-                                    <div className="flex flex-col">
-                                        <span className="text-sm font-medium">{u.name}</span>
-                                        <span className="text-xs text-muted-foreground">{u.email}</span>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
+                        <Paper elevation={16} sx={{ position: 'absolute', top: 70, left: 16, right: 16, zIndex: 10, bgcolor: 'background.paper', border: '1px solid #00e5ff', boxShadow: '0 0 15px rgba(0,229,255,0.3)' }}>
+                            <List sx={{ p: 0 }}>
+                                {searchResults.map(u => (
+                                    <ListItem key={u.id} button onClick={() => handleCreateChat(u)} sx={{ '&:hover': { bgcolor: 'rgba(0,229,255,0.1)' } }}>
+                                        <ListItemAvatar>
+                                            <Avatar src={u.avatar || `https://ui-avatars.com/api/?name=${u.name}`} sx={{ width: 32, height: 32, border: 'none', boxShadow: 'none' }} />
+                                        </ListItemAvatar>
+                                        <ListItemText primary={u.name} secondary={u.email} primaryTypographyProps={{ variant: 'body2' }} secondaryTypographyProps={{ variant: 'caption', color: 'text.secondary' }} />
+                                    </ListItem>
+                                ))}
+                            </List>
+                        </Paper>
                     )}
-                </div>
+                </Box>
 
                 {/* Chat List */}
-                <div className="flex-1 overflow-y-auto w-full px-2">
+                <List sx={{ flex: 1, overflowY: 'auto', p: 1 }}>
                     {chats.map(chat => {
                         const isSelected = activeChat?.id === chat.id;
                         return (
-                            <div
+                            <ListItem
                                 key={chat.id}
+                                button
                                 onClick={() => selectChat(chat)}
-                                className={`flex gap-3 items-center p-3 rounded-xl cursor-pointer transition-colors mb-1 ${isSelected ? 'bg-primary/10 border border-primary/20' : 'hover:bg-muted'}`}
+                                sx={{
+                                    borderRadius: 2,
+                                    mb: 0.5,
+                                    bgcolor: isSelected ? 'rgba(0,229,255,0.15)' : 'transparent',
+                                    border: isSelected ? '1px solid rgba(0,229,255,0.3)' : '1px solid transparent',
+                                    boxShadow: isSelected ? 'inset 0 0 10px rgba(0,229,255,0.1)' : 'none',
+                                    '&:hover': { bgcolor: isSelected ? 'rgba(0,229,255,0.2)' : 'rgba(255,255,255,0.05)' }
+                                }}
                             >
-                                <div className="w-12 h-12 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-bold shrink-0">
-                                    {chat.isGroup ? 'G' : 'C'}
-                                </div>
-                                <div className="flex-1 text-left min-w-0">
-                                    <div className="flex justify-between items-center mb-1">
-                                        <h4 className="font-semibold text-sm truncate">{chat.isGroup ? chat.groupName : "Direct Chat"}</h4>
-                                    </div>
-                                    <p className="text-xs text-muted-foreground truncate">
-                                        {chat.lastMessage || "No messages yet"}
-                                    </p>
-                                </div>
-                            </div>
+                                <ListItemAvatar>
+                                    <Avatar sx={{ bgcolor: isSelected ? 'primary.main' : 'background.default', color: isSelected ? '#000' : 'primary.main', border: '1px solid #00e5ff', boxShadow: isSelected ? '0 0 10px rgba(0,229,255,0.8)' : 'none' }}>
+                                        {chat.isGroup ? <GroupIcon /> : <PersonIcon />}
+                                    </Avatar>
+                                </ListItemAvatar>
+                                <ListItemText
+                                    primary={chat.isGroup ? chat.groupName : "Direct Chat"}
+                                    secondary={chat.lastMessage || "No messages yet"}
+                                    primaryTypographyProps={{ variant: 'subtitle2', noWrap: true, color: isSelected ? '#fff' : 'text.primary' }}
+                                    secondaryTypographyProps={{ variant: 'caption', noWrap: true, color: 'text.secondary' }}
+                                />
+                            </ListItem>
                         );
                     })}
-                </div>
-            </div>
+                </List>
+            </Box>
 
             {/* Main Chat Area */}
             {activeChat ? (
-                <div className="flex-1 flex flex-col bg-background/50 relative">
+                <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative' }}>
 
                     {/* Header */}
-                    <div className="h-16 border-b border-border flex items-center justify-between px-6 bg-secondary/50 backdrop-blur-md sticky top-0 z-10">
-                        <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-bold shrink-0">
-                                {activeChat.isGroup ? 'G' : 'C'}
-                            </div>
-                            <div className="flex flex-col">
-                                <span className="font-semibold">{activeChat.isGroup ? activeChat.groupName : "Direct Chat"}</span>
-                                <span className="text-xs text-muted-foreground">
+                    <Paper elevation={4} sx={{ height: 64, px: 3, display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderRadius: 0, borderBottom: '1px solid rgba(0,229,255,0.1)', bgcolor: 'rgba(13, 24, 46, 0.8)', backdropFilter: 'blur(10px)', zIndex: 1, boxShadow: '0 4px 20px rgba(0,0,0,0.5)' }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                            <Avatar sx={{ bgcolor: 'primary.main', color: '#000', boxShadow: '0 0 10px rgba(0,229,255,0.5)' }}>
+                                {activeChat.isGroup ? <GroupIcon /> : <PersonIcon />}
+                            </Avatar>
+                            <Box>
+                                <Typography variant="subtitle1" fontWeight="bold">{activeChat.isGroup ? activeChat.groupName : "Direct Chat"}</Typography>
+                                <Typography variant="caption" color="text.secondary">
                                     {typingUsers[activeChat.id] ? (
-                                        <span className="text-primary animate-pulse">typing...</span>
-                                    ) : (
-                                        "Click here for contact info"
-                                    )}
-                                </span>
-                            </div>
-                        </div>
-                        <div className="flex items-center gap-3 text-muted-foreground">
-                            <button className="p-2 hover:bg-muted rounded-full">
-                                <Search size={20} />
-                            </button>
-                            <button className="p-2 hover:bg-muted rounded-full">
-                                <Settings size={20} />
-                            </button>
-                        </div>
-                    </div>
+                                        <span style={{ color: '#00e5ff', textShadow: '0 0 5px rgba(0,229,255,0.8)' }}>typing...</span>
+                                    ) : "Click here for contact info"}
+                                </Typography>
+                            </Box>
+                        </Box>
+                        <Box>
+                            <IconButton color="primary" sx={{ '&:hover': { boxShadow: '0 0 10px rgba(0,229,255,0.3)', bgcolor: 'rgba(0,229,255,0.1)' } }}><SearchIcon /></IconButton>
+                            <IconButton color="primary" sx={{ '&:hover': { boxShadow: '0 0 10px rgba(0,229,255,0.3)', bgcolor: 'rgba(0,229,255,0.1)' } }}><SettingsIcon /></IconButton>
+                        </Box>
+                    </Paper>
 
                     {/* Messages Wrapper */}
-                    <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
+                    <Box sx={{ flex: 1, overflowY: 'auto', p: 3, display: 'flex', flexDirection: 'column', gap: 2, bgcolor: 'rgba(5, 10, 21, 0.9)', backgroundImage: 'radial-gradient(circle at center, rgba(0,229,255,0.03) 0%, transparent 70%)' }}>
                         {messages.map((msg, i) => {
                             const isMine = msg.senderId === user.id;
-
                             return (
-                                <div key={i} className={`flex w-full ${isMine ? 'justify-end' : 'justify-start'}`}>
-                                    <div className={`max-w-[70%] sm:max-w-[50%] p-3 rounded-2xl flex flex-col gap-1 shadow-sm
-                    ${isMine
-                                            ? 'bg-primary text-primary-foreground rounded-tr-none'
-                                            : 'bg-secondary text-secondary-foreground rounded-tl-none border border-border'}`}>
-
+                                <Box key={i} sx={{ display: 'flex', justifyContent: isMine ? 'flex-end' : 'flex-start' }}>
+                                    <Paper
+                                        elevation={isMine ? 8 : 2}
+                                        sx={{
+                                            maxWidth: '70%', p: 1.5, px: 2,
+                                            bgcolor: isMine ? 'rgba(0, 229, 255, 0.15)' : 'background.paper',
+                                            color: isMine ? '#fff' : 'text.primary',
+                                            borderRadius: isMine ? '20px 20px 0 20px' : '20px 20px 20px 0',
+                                            border: isMine ? '1px solid rgba(0,229,255,0.5)' : '1px solid rgba(255,255,255,0.1)',
+                                            boxShadow: isMine ? '0 0 15px rgba(0,229,255,0.15)' : 'none',
+                                        }}
+                                    >
                                         {msg.messageType === 'text' && (
-                                            <p className="text-[15px] leading-relaxed break-words">{msg.text || msg.encryptedMessage}</p>
+                                            <Typography variant="body2" sx={{ wordBreak: 'break-word', lineHeight: 1.5 }}>
+                                                {msg.text || msg.encryptedMessage}
+                                            </Typography>
                                         )}
-
                                         {msg.messageType === 'image' && (
-                                            <img src={msg.mediaUrl} alt="attachment" className="rounded-lg w-full max-h-60 object-cover" />
+                                            <img src={msg.mediaUrl} alt="attachment" style={{ maxWidth: '100%', borderRadius: 8, marginTop: 4 }} />
                                         )}
-
-                                        <span className={`text-[10px] self-end mt-1 ${isMine ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
+                                        <Typography variant="caption" sx={{ display: 'block', mt: 1, textAlign: 'right', color: isMine ? 'rgba(255,255,255,0.5)' : 'text.secondary', fontSize: '0.65rem' }}>
                                             {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                        </span>
-                                    </div>
-                                </div>
+                                        </Typography>
+                                    </Paper>
+                                </Box>
                             );
                         })}
                         <div ref={messagesEndRef} />
-                    </div>
+                    </Box>
 
                     {/* Input Area */}
-                    <div className="h-20 border-t border-border px-4 py-3 bg-secondary/50 flex items-center gap-2">
-                        <button className="p-2 text-muted-foreground hover:text-primary transition-colors cursor-pointer rounded-full hover:bg-muted">
-                            <Paperclip size={22} />
-                        </button>
-                        <form onSubmit={handleSend} className="flex-1 flex items-center bg-input/50 border border-border rounded-full pr-1 overflow-hidden transition-all focus-within:ring-2 focus-within:ring-primary/50">
-                            <input
-                                type="text"
-                                value={msgInput}
-                                onChange={handleTyping}
-                                placeholder="Message securely..."
-                                className="w-full bg-transparent border-none py-3 pl-5 pr-4 text-sm focus:outline-none"
-                            />
-                            <button type="button" className="p-2 text-muted-foreground hover:text-primary transition-colors cursor-pointer">
-                                <Smile size={20} />
-                            </button>
-                            <button type="submit" disabled={!msgInput.trim()} className={`p-2.5 rounded-full flex items-center justify-center transition-all ${msgInput.trim() ? 'bg-primary text-white scale-100 hover:scale-105' : 'bg-transparent text-muted-foreground scale-95'}`}>
-                                <Send size={18} className={msgInput.trim() ? "ml-0.5" : ""} />
-                            </button>
-                        </form>
-                        <button className="p-3 bg-secondary border border-border text-muted-foreground rounded-full hover:text-primary hover:bg-muted transition-colors ml-1">
-                            <Mic size={20} />
-                        </button>
-                    </div>
+                    <Paper elevation={12} component="form" onSubmit={handleSend} sx={{ p: 2, display: 'flex', alignItems: 'center', gap: 1, borderRadius: 0, borderTop: '1px solid rgba(0,229,255,0.2)', bgcolor: 'background.paper', zIndex: 1 }}>
+                        <IconButton color="primary" sx={{ '&:hover': { boxShadow: '0 0 10px rgba(0,229,255,0.3)', bgcolor: 'rgba(0,229,255,0.1)' } }}>
+                            <AttachFileIcon />
+                        </IconButton>
+                        <TextField
+                            fullWidth
+                            variant="outlined"
+                            size="small"
+                            placeholder="Message securely..."
+                            value={msgInput}
+                            onChange={handleTyping}
+                            sx={{
+                                '& .MuiOutlinedInput-root': { borderRadius: 8, bgcolor: 'rgba(0,0,0,0.4)' },
+                            }}
+                        />
+                        <IconButton
+                            type="submit"
+                            disabled={!msgInput.trim()}
+                            sx={{
+                                bgcolor: msgInput.trim() ? 'primary.main' : 'transparent',
+                                color: msgInput.trim() ? '#000' : 'text.secondary',
+                                '&:hover': { bgcolor: 'primary.light', boxShadow: '0 0 15px #00e5ff' },
+                                transition: 'all 0.3s'
+                            }}
+                        >
+                            <SendIcon fontSize="small" />
+                        </IconButton>
+                    </Paper>
 
-                </div>
+                </Box>
             ) : (
-                <div className="flex-1 flex items-center justify-center bg-background/50 flex-col gap-4">
-                    <div className="w-24 h-24 rounded-full bg-primary/10 flex items-center justify-center text-primary mb-2">
-                        <Lock size={48} strokeWidth={1} />
-                    </div>
-                    <h2 className="text-2xl font-bold">SecureChat for Web</h2>
-                    <p className="text-muted-foreground text-center max-w-sm">
+                <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', bgcolor: 'rgba(5, 10, 21, 0.9)' }}>
+                    <Box sx={{
+                        width: 100, height: 100, borderRadius: '50%', border: '2px solid #00e5ff',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 3,
+                        boxShadow: '0 0 30px rgba(0,229,255,0.4)', bgcolor: 'rgba(0,229,255,0.05)'
+                    }}>
+                        <LockIcon sx={{ fontSize: 50, color: '#00e5ff', filter: 'drop-shadow(0 0 10px rgba(0,229,255,0.8))' }} />
+                    </Box>
+                    <Typography variant="h5" fontWeight="bold" sx={{ textShadow: '0 0 10px rgba(0,229,255,0.5)' }}>SecureChat for Web</Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ mt: 1, maxWidth: 300, textAlign: 'center' }}>
                         End-to-end encrypted messaging. Click on a chat from the sidebar or search for users by email.
-                    </p>
-                </div>
+                    </Typography>
+                </Box>
             )}
 
-        </div>
+        </Box>
     );
 }

@@ -6,6 +6,7 @@ export const api = axios.create({
     baseURL: API_URL,
 });
 
+// Automatically attach JWT to all outgoing requests
 api.interceptors.request.use((config) => {
     const token = localStorage.getItem('token');
     if (token) {
@@ -19,7 +20,9 @@ export const authAPI = {
 };
 
 export const userAPI = {
-    searchUsers: (email) => api.get(`/users/search?email=${email}`),
+    searchUsers: (email) => api.get(`/users/search?email=${encodeURIComponent(email)}`),
+    getUserById: (id) => api.get(`/users/${id}`),
+    getCurrentUser: () => api.get('/users/me'),
 };
 
 export const chatAPI = {

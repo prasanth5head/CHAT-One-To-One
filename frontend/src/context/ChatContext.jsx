@@ -1,8 +1,14 @@
-import { createContext, useContext, useState, useEffect } from 'react';
-import { chatAPI, messageAPI } from '../services/api';
+import { createContext, useContext, useState, useEffect, useRef } from 'react';
+import { chatAPI, messageAPI, userAPI } from '../services/api';
 import { socketService } from '../services/socket';
 import { useAuth } from './AuthContext';
-import { encryptMessage, encryptAESKeyWithRSA, decryptMessage, decryptAESKeyWithRSA, generateAESKey } from '../utils/encryption';
+import {
+    encryptMessage,
+    encryptAESKeyWithRSA,
+    decryptMessage,
+    decryptAESKeyWithRSA,
+    generateAESKey
+} from '../utils/encryption';
 import forge from 'node-forge';
 
 const ChatContext = createContext();
@@ -14,57 +20,86 @@ export const ChatProvider = ({ children }) => {
     const [chats, setChats] = useState([]);
     const [activeChat, setActiveChat] = useState(null);
     const [messages, setMessages] = useState([]);
-    const [typingUsers, setTypingUsers] = useState({}); // { chatId: true/false }
+    const [typingUsers, setTypingUsers] = useState({});
+    // Cache of { userId -> User object } to avoid repeated API calls
+    const userCache = useRef({});
 
-    // Load chats on init
+    // ── Connect WebSocket when user logs in ─────────────────────────────────────
     useEffect(() => {
         if (user) {
             loadChats();
-            // connect socket
             const token = localStorage.getItem('token');
             socketService.connect(token, () => {
-                // After connect, subscribe to all active chats to listen for incoming
-                console.log("Connected to STOMP over WebSocket");
+                console.log('Connected to STOMP over WebSocket');
             });
         } else {
             socketService.disconnect();
         }
     }, [user]);
 
-    // Subscribe to active chat
+    // ── Subscribe to the active chat channel ────────────────────────────────────
     useEffect(() => {
-        if (activeChat && socketService.connected) {
-            loadMessages(activeChat.id);
+        if (!activeChat) return;
+
+        setMessages([]);
+        loadMessages(activeChat.id);
+
+        // Wait for socket to be connected, retry if needed
+        const subscribe = () => {
+            if (!socketService.connected) {
+                setTimeout(subscribe, 500);
+                return;
+            }
 
             socketService.subscribe(`/topic/chat/${activeChat.id}`, (incomingMessage) => {
-                // Attempt to decrypt
-                try {
-                    const privateKeyPem = localStorage.getItem('privateKey');
-                    const encryptedKeys = incomingMessage.encryptedKeys;
-                    const myEncryptedKey = encryptedKeys[user.id];
-
-                    if (myEncryptedKey) {
-                        const aesKey = decryptAESKeyWithRSA(myEncryptedKey, privateKeyPem);
-                        const decryptedMsg = decryptMessage(incomingMessage.encryptedMessage, forge.util.encode64(aesKey));
-
-                        setMessages((prev) => [...prev, { ...incomingMessage, text: decryptedMsg }]);
-                    } else {
-                        // Cannot decrypt
-                        setMessages((prev) => [...prev, incomingMessage]);
-                    }
-                } catch (e) {
-                    console.error("Failed to decrypt message", e);
-                    setMessages((prev) => [...prev, incomingMessage]);
-                }
+                const decrypted = tryDecrypt(incomingMessage);
+                setMessages((prev) => {
+                    // Avoid duplicates (message may arrive via WS after we already loaded via REST)
+                    if (prev.find(m => m.id === incomingMessage.id)) return prev;
+                    return [...prev, decrypted];
+                });
             });
 
             socketService.subscribe(`/topic/chat/${activeChat.id}/typing`, (payload) => {
                 if (payload.userId !== user.id) {
                     setTypingUsers((prev) => ({ ...prev, [activeChat.id]: payload.typing }));
+                    // Auto-clear typing indicator after 3 seconds
+                    setTimeout(() => setTypingUsers((prev) => ({ ...prev, [activeChat.id]: false })), 3000);
                 }
             });
-        }
+        };
+
+        subscribe();
     }, [activeChat]);
+
+    // ── Helper: decrypt a message using local private key ────────────────────────
+    const tryDecrypt = (msg) => {
+        try {
+            const privateKeyPem = localStorage.getItem('privateKey');
+            const myEncryptedKey = msg.encryptedKeys?.[user.id];
+            if (myEncryptedKey && privateKeyPem) {
+                const aesKeyBytes = decryptAESKeyWithRSA(myEncryptedKey, privateKeyPem);
+                const aesKeyB64 = forge.util.encode64(aesKeyBytes);
+                const text = decryptMessage(msg.encryptedMessage, aesKeyB64);
+                return { ...msg, text };
+            }
+        } catch (e) {
+            console.warn('Decryption failed for message:', msg.id, e.message);
+        }
+        return msg; // Return raw (still renders as ciphertext if decryption fails)
+    };
+
+    // ── Helper: get a user from cache or API ─────────────────────────────────────
+    const fetchUser = async (userId) => {
+        if (userCache.current[userId]) return userCache.current[userId];
+        try {
+            const res = await userAPI.getUserById(userId);
+            userCache.current[userId] = res.data;
+            return res.data;
+        } catch {
+            return null;
+        }
+    };
 
     const loadChats = async () => {
         try {
@@ -82,62 +117,47 @@ export const ChatProvider = ({ children }) => {
     const loadMessages = async (chatId) => {
         try {
             const res = await messageAPI.getMessages(chatId);
-            const msgs = res.data;
-            const privateKeyPem = localStorage.getItem('privateKey');
-
-            const decryptedMsgs = msgs.map(msg => {
-                try {
-                    const myEncryptedKey = msg.encryptedKeys[user.id];
-                    if (myEncryptedKey && privateKeyPem) {
-                        const aesKeyBytes = decryptAESKeyWithRSA(myEncryptedKey, privateKeyPem);
-                        const aesKeyPem = forge.util.encode64(aesKeyBytes);
-                        const txt = decryptMessage(msg.encryptedMessage, aesKeyPem);
-                        return { ...msg, text: txt };
-                    }
-                    return msg;
-                } catch (e) {
-                    return msg;
-                }
-            });
-
-            setMessages(decryptedMsgs);
+            const decrypted = res.data.map(tryDecrypt);
+            setMessages(decrypted);
         } catch (e) {
             console.error(e);
         }
     };
 
+    // ── Send a message with full E2EE ────────────────────────────────────────────
     const sendMessage = async (text, mediaUrl = null, messageType = 'text') => {
         if (!activeChat) return;
 
-        // Generate AES key for this message
-        const aesKey = generateAESKey();
-        const aesKeyPem = forge.util.encode64(aesKey);
-        // Encrypt the text
-        const encryptedMessage = encryptMessage(text || "Media File", aesKeyPem);
+        // 1. Generate a fresh AES-256 key for this message
+        const aesKeyBytes = generateAESKey();
+        const aesKeyB64 = forge.util.encode64(aesKeyBytes);
 
-        // For each participant in chat, we need to encrypt the AES key with their public key
-        // In this basic version, we assume we have public keys of participants
-        // Usually retrieved from API when chat is created or selected
-        // Note: This requires activeChat to have participants populated with public keys
-        // For simplicity we will assume 'chat.participantsData' holds user objects
+        // 2. Encrypt the plaintext with AES-256-GCM
+        const encryptedMessage = encryptMessage(text || 'Media File', aesKeyB64);
 
-        // In a real application we would have fetched users, let's pretend we have a map
-        // We didn't fetch full users, but we can do a lazy fetch or keep AES key only for ourself and receiver
+        // 3. For each participant, RSA-encrypt the AES key with their public key
+        const encryptedKeys = {};
+        for (const participantId of activeChat.participants) {
+            const participantUser = await fetchUser(participantId);
+            if (participantUser?.publicKey) {
+                try {
+                    encryptedKeys[participantId] = encryptAESKeyWithRSA(aesKeyBytes, participantUser.publicKey);
+                } catch (e) {
+                    console.warn(`Could not encrypt key for user ${participantId}`, e.message);
+                }
+            }
+        }
 
-        // For demonstration, we just send non-encrypted if no public key available, 
-        // or encrypt for self to at least see sent messages.
-        // Given the prompt constraints, we must do E2EE. Let's send the text for now until UI injects keys.
-        const msgPayload = {
+        // 4. Send the fully encrypted payload over WebSocket — server never sees plaintext
+        socketService.sendMessage('/app/chat.sendMessage', {
             chatId: activeChat.id,
             senderId: user.id,
-            encryptedMessage: encryptedMessage,
-            encryptedKeys: {}, // To be populated
-            mediaUrl: mediaUrl,
-            messageType: messageType,
-            status: "sent"
-        };
-
-        socketService.sendMessage('/app/chat.sendMessage', msgPayload);
+            encryptedMessage,
+            encryptedKeys,
+            mediaUrl,
+            messageType,
+            status: 'sent',
+        });
     };
 
     const sendTyping = (isTyping) => {
@@ -145,7 +165,7 @@ export const ChatProvider = ({ children }) => {
             socketService.sendMessage('/app/chat.typing', {
                 chatId: activeChat.id,
                 userId: user.id,
-                typing: isTyping
+                typing: isTyping,
             });
         }
     };
@@ -153,7 +173,8 @@ export const ChatProvider = ({ children }) => {
     const createChat = async (targetUser) => {
         try {
             const res = await chatAPI.createOrGetChat(targetUser.id);
-            loadChats();
+            await loadChats();
+            setActiveChat(res.data);
             return res.data;
         } catch (e) {
             console.error(e);
@@ -162,7 +183,8 @@ export const ChatProvider = ({ children }) => {
 
     return (
         <ChatContext.Provider value={{
-            chats, activeChat, messages, selectChat, sendMessage, loadChats, sendTyping, typingUsers, createChat
+            chats, activeChat, messages, selectChat,
+            sendMessage, loadChats, sendTyping, typingUsers, createChat
         }}>
             {children}
         </ChatContext.Provider>
