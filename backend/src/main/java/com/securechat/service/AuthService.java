@@ -8,6 +8,7 @@ import com.securechat.payload.LoginRequest;
 import com.securechat.repository.UserRepository;
 import com.securechat.security.JwtProvider;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
@@ -26,46 +27,74 @@ public class AuthService {
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public AuthResponse authenticate(LoginRequest loginRequest) throws Exception {
-        String tokenInfoUrl = "https://oauth2.googleapis.com/tokeninfo?id_token=" + loginRequest.getToken();
+        String token = loginRequest.getToken();
 
+        String email;
+        String name;
+        String picture;
+
+        // Strategy 1 — try Google id_token (tokeninfo endpoint)
+        // Used when frontend sends an id_token (e.g. via OneTap or authorization code
+        // flow)
         try {
+            String tokenInfoUrl = "https://oauth2.googleapis.com/tokeninfo?id_token=" + token;
             String response = restTemplate.getForObject(tokenInfoUrl, String.class);
             JsonNode payload = objectMapper.readTree(response);
 
-            String email = payload.get("email").asText();
-            String name = payload.has("name") ? payload.get("name").asText() : email;
-            String picture = payload.has("picture") ? payload.get("picture").asText() : "";
+            if (payload.has("error"))
+                throw new RuntimeException("Not an id_token");
 
-            Optional<User> userOpt = userRepository.findByEmail(email);
-            User user;
+            email = payload.get("email").asText();
+            name = payload.has("name") ? payload.get("name").asText() : email;
+            picture = payload.has("picture") ? payload.get("picture").asText() : "";
 
-            if (userOpt.isPresent()) {
-                user = userOpt.get();
-                // Update public key potentially if they login from a new device?
-                // The prompt says private key stored locally. If they lose it, they generate
-                // new pair.
-                // We'll update the public key if provided, this revokes access to past messages
-                // if they can't decrypt
-                if (loginRequest.getPublicKey() != null && !loginRequest.getPublicKey().isEmpty()) {
-                    user.setPublicKey(loginRequest.getPublicKey());
-                }
-                user.setAvatar(picture);
-                user.setName(name);
-                user = userRepository.save(user);
-            } else {
-                user = new User();
-                user.setEmail(email);
-                user.setName(name);
-                user.setAvatar(picture);
-                user.setPublicKey(loginRequest.getPublicKey());
-                user = userRepository.save(user);
+        } catch (Exception idTokenException) {
+            // Strategy 2 — treat token as an access_token and call Google userinfo
+            // Used when frontend uses the implicit flow (useGoogleLogin default)
+            try {
+                HttpHeaders headers = new HttpHeaders();
+                headers.setBearerAuth(token);
+                HttpEntity<Void> entity = new HttpEntity<>(headers);
+
+                ResponseEntity<String> response = restTemplate.exchange(
+                        "https://www.googleapis.com/oauth2/v3/userinfo",
+                        HttpMethod.GET,
+                        entity,
+                        String.class);
+
+                JsonNode payload = objectMapper.readTree(response.getBody());
+
+                email = payload.get("email").asText();
+                name = payload.has("name") ? payload.get("name").asText() : email;
+                picture = payload.has("picture") ? payload.get("picture").asText() : "";
+
+            } catch (Exception accessTokenException) {
+                throw new Exception("Invalid Google token: " + accessTokenException.getMessage());
             }
-
-            String jwt = jwtProvider.generateToken(user.getId(), user.getEmail());
-            return new AuthResponse(jwt, user);
-
-        } catch (Exception e) {
-            throw new Exception("Invalid Google Token", e);
         }
+
+        // Upsert user record
+        Optional<User> userOpt = userRepository.findByEmail(email);
+        User user;
+
+        if (userOpt.isPresent()) {
+            user = userOpt.get();
+            user.setAvatar(picture);
+            user.setName(name);
+            // Update public key if a new one is provided (e.g. user lost their private key)
+            if (loginRequest.getPublicKey() != null && !loginRequest.getPublicKey().isEmpty()) {
+                user.setPublicKey(loginRequest.getPublicKey());
+            }
+        } else {
+            user = new User();
+            user.setEmail(email);
+            user.setName(name);
+            user.setAvatar(picture);
+            user.setPublicKey(loginRequest.getPublicKey());
+        }
+
+        user = userRepository.save(user);
+        String jwt = jwtProvider.generateToken(user.getId(), user.getEmail());
+        return new AuthResponse(jwt, user);
     }
 }
