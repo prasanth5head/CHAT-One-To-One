@@ -3,12 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { authAPI } from '../services/api';
 import { generateKeyPair } from '../utils/encryption';
-import { Box, Typography, Paper, Alert, CircularProgress, Container, Stack, IconButton } from '@mui/material';
+import { Box, Typography, Paper, Alert, CircularProgress, Container, Stack, IconButton, Button } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import MessageIcon from '@mui/icons-material/Message';
 import LockIcon from '@mui/icons-material/Lock';
 import ShieldIcon from '@mui/icons-material/Shield';
-import MessageIcon from '@mui/icons-material/Message';
 import { useGoogleLogin } from '@react-oauth/google';
+import BackgroundVideo from '../components/BackgroundVideo';
 
 export default function Login() {
     const [loading, setLoading] = useState(false);
@@ -16,27 +17,17 @@ export default function Login() {
     const { login } = useAuth();
     const navigate = useNavigate();
 
-    // Called after user successfully picks their Google account in the popup.
-    // With flow:'implicit', tokenResponse contains { access_token, ... } — NOT credential.
-    // We send the access_token to the backend which calls Google's userinfo endpoint.
     const handleGoogleSuccess = async (tokenResponse) => {
         setLoading(true);
         setError('');
         try {
             const accessToken = tokenResponse.access_token;
-
             if (!accessToken) throw new Error('No access token received from Google.');
-
-            // Generate RSA-2048 key pair client-side — private key NEVER leaves the browser
             const keys = await generateKeyPair();
-
-            // Send access_token + public key to backend
             const res = await authAPI.loginWithGoogle({
                 token: accessToken,
                 publicKey: keys.publicKey,
             });
-
-            // Persist JWT, user, and private key locally
             login(res.data.user, res.data.token, keys.privateKey);
             navigate('/chat');
         } catch (err) {
@@ -48,7 +39,6 @@ export default function Login() {
         }
     };
 
-    // useGoogleLogin (implicit flow) opens a Google popup and returns an access_token
     const googleLogin = useGoogleLogin({
         onSuccess: handleGoogleSuccess,
         onError: (err) => {
@@ -67,45 +57,45 @@ export default function Login() {
                 minHeight: '100vh',
                 alignItems: 'center',
                 justifyContent: 'center',
-                p: 2,
-                // Subtle radial glow background
-                background: 'radial-gradient(ellipse at 50% 50%, rgba(0,229,255,0.06) 0%, #050a15 70%)',
                 position: 'relative',
             }}
         >
-            {/* Back to Welcome */}
+            <BackgroundVideo />
+
             <IconButton
                 onClick={() => navigate('/')}
-                sx={{ position: 'absolute', top: 20, left: 20, color: 'text.secondary', '&:hover': { color: 'primary.main' } }}
+                sx={{ position: 'absolute', top: 20, left: 20, color: 'primary.main', bgcolor: 'rgba(0,0,0,0.3)', backdropFilter: 'blur(5px)', '&:hover': { bgcolor: 'rgba(0,229,255,0.1)' } }}
             >
                 <ArrowBackIcon />
             </IconButton>
+
             <Container maxWidth="xs">
                 <Paper
-                    elevation={12}
+                    elevation={0}
                     sx={{
                         p: 4,
-                        borderRadius: 3,
+                        borderRadius: 4,
                         display: 'flex',
                         flexDirection: 'column',
                         alignItems: 'center',
-                        border: '1px solid rgba(0,229,255,0.2)',
-                        boxShadow: '0 0 40px rgba(0,229,255,0.08)',
+                        background: 'rgba(13, 24, 46, 0.45)',
+                        backdropFilter: 'blur(16px) saturate(180%)',
+                        border: '1px solid rgba(0, 229, 255, 0.2)',
+                        boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.37)',
                     }}
                 >
-                    {/* Icon */}
                     <Box
                         sx={{
-                            width: 72, height: 72, borderRadius: '50%',
-                            backgroundColor: 'background.default',
+                            width: 80, height: 80, borderRadius: '50%',
+                            backgroundColor: 'rgba(5, 10, 21, 0.6)',
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            boxShadow: '0 0 20px rgba(0,229,255,0.6), inset 0 0 20px rgba(0,229,255,0.05)',
+                            boxShadow: '0 0 25px rgba(0,229,255,0.4)',
                             mb: 3, border: '1.5px solid #00e5ff',
                         }}
                     >
                         <MessageIcon
                             color="primary"
-                            sx={{ fontSize: 36, filter: 'drop-shadow(0 0 8px rgba(0,229,255,0.9))' }}
+                            sx={{ fontSize: 40, filter: 'drop-shadow(0 0 8px rgba(0,229,255,0.9))' }}
                         />
                     </Box>
 
@@ -113,21 +103,20 @@ export default function Login() {
                         variant="h4"
                         fontWeight="bold"
                         gutterBottom
-                        sx={{ textShadow: '0 0 14px rgba(0,229,255,0.5)', letterSpacing: '-0.5px' }}
+                        sx={{ textShadow: '0 0 15px rgba(0,229,255,0.4)', letterSpacing: '-0.5px' }}
                     >
                         SecureChat
                     </Typography>
-                    <Typography variant="body2" color="text.secondary" align="center" sx={{ mb: 4 }}>
+                    <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.7)', mb: 4 }}>
                         End-to-End Encrypted Messaging
                     </Typography>
 
                     {error && (
-                        <Alert severity="error" sx={{ width: '100%', mb: 3, borderRadius: 2 }}>
+                        <Alert severity="error" sx={{ width: '100%', mb: 3, borderRadius: 2, bgcolor: 'rgba(211, 47, 47, 0.1)', color: '#ffcdd2', border: '1px solid #d32f2f' }}>
                             {error}
                         </Alert>
                     )}
 
-                    {/* Google Login Button */}
                     <Box
                         onClick={!loading ? googleLogin : undefined}
                         sx={{
@@ -136,20 +125,16 @@ export default function Login() {
                             alignItems: 'center',
                             justifyContent: 'center',
                             gap: 2,
-                            py: 1.4,
-                            px: 3,
+                            py: 1.5,
                             borderRadius: 2,
                             bgcolor: '#fff',
                             color: '#3c4043',
                             fontWeight: 600,
-                            fontSize: '0.95rem',
                             cursor: loading ? 'not-allowed' : 'pointer',
-                            opacity: loading ? 0.7 : 1,
-                            transition: 'box-shadow 0.3s, transform 0.2s',
-                            boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                            transition: 'all 0.3s',
                             '&:hover': {
-                                boxShadow: loading ? undefined : '0 0 20px rgba(0,229,255,0.5)',
-                                transform: loading ? undefined : 'translateY(-1px)',
+                                boxShadow: '0 0 20px rgba(0,229,255,0.6)',
+                                transform: 'translateY(-2px)',
                             },
                         }}
                     >
@@ -157,7 +142,7 @@ export default function Login() {
                             <CircularProgress size={22} sx={{ color: '#4285F4' }} />
                         ) : (
                             <img
-                                src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg"
+                                src="https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg"
                                 alt="Google"
                                 style={{ width: 22, height: 22 }}
                             />
@@ -165,29 +150,34 @@ export default function Login() {
                         <span>{loading ? 'Connecting...' : 'Continue with Google'}</span>
                     </Box>
 
-                    {/* Security info */}
                     <Stack spacing={2} sx={{ mt: 5, width: '100%' }}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                            <LockIcon
-                                color="primary"
-                                fontSize="small"
-                                sx={{ filter: 'drop-shadow(0 0 5px rgba(0,229,255,0.5))' }}
-                            />
+                            <LockIcon color="primary" fontSize="small" />
                             <Typography variant="caption" color="text.secondary">
-                                End-to-end encryption with RSA-2048 &amp; AES-256
+                                RSA-2048 &amp; AES-256 Encryption
                             </Typography>
                         </Box>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                            <ShieldIcon
-                                color="primary"
-                                fontSize="small"
-                                sx={{ filter: 'drop-shadow(0 0 5px rgba(0,229,255,0.5))' }}
-                            />
+                            <ShieldIcon color="primary" fontSize="small" />
                             <Typography variant="caption" color="text.secondary">
-                                Your private key never leaves your device
+                                Private keys stay on your device
                             </Typography>
                         </Box>
                     </Stack>
+
+                    <Box sx={{ mt: 4, width: '100%', textAlign: 'center' }}>
+                        <Typography variant="caption" color="text.secondary">
+                            Don't have an account?{' '}
+                            <Button
+                                variant="text"
+                                size="small"
+                                sx={{ p: 0, minWidth: 'auto', fontWeight: 600, color: 'primary.main', verticalAlign: 'baseline' }}
+                                onClick={() => navigate('/register')}
+                            >
+                                Register Now
+                            </Button>
+                        </Typography>
+                    </Box>
                 </Paper>
             </Container>
         </Box>

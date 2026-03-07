@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { ChatProvider } from './context/ChatContext';
 import Welcome from './pages/Welcome';
 import Login from './pages/Login';
+import Register from './pages/Register';
 import ChatPage from './pages/ChatPage';
 import { ThemeProvider, CssBaseline, Box, CircularProgress } from '@mui/material';
 import glowingTheme from './theme';
@@ -39,6 +40,8 @@ function AppRoutes() {
       <Routes>
         <Route path="/" element={<PublicRoute><Welcome /></PublicRoute>} />
         <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
+        <Route path="/lohgin" element={<Navigate to="/login" replace />} />
+        <Route path="/register" element={<PublicRoute><Register /></PublicRoute>} />
         <Route path="/chat" element={<PrivateRoute><ChatPage /></PrivateRoute>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
