@@ -81,8 +81,7 @@ export const ChatProvider = ({ children }) => {
             const myEncryptedKey = msg.encryptedKeys?.[user.id];
             if (myEncryptedKey && privateKeyPem) {
                 const aesKeyBytes = decryptAESKeyWithRSA(myEncryptedKey, privateKeyPem);
-                const aesKeyB64 = forge.util.encode64(aesKeyBytes);
-                const text = decryptMessage(msg.encryptedMessage, aesKeyB64);
+                const text = decryptMessage(msg.encryptedMessage, aesKeyBytes);
                 return { ...msg, text };
             }
         } catch (e) {
@@ -145,10 +144,9 @@ export const ChatProvider = ({ children }) => {
         try {
             // 1. Generate a fresh AES-256 key for this message
             const aesKeyBytes = generateAESKey();
-            const aesKeyB64 = forge.util.encode64(aesKeyBytes);
 
             // 2. Encrypt the plaintext with AES-256-GCM
-            const encryptedMessage = encryptMessage(text || 'Media File', aesKeyB64);
+            const encryptedMessage = encryptMessage(text || 'Media File', aesKeyBytes);
 
             // 3. For each participant, RSA-encrypt the AES key with their public key
             const encryptedKeys = {};

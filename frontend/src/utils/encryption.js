@@ -19,9 +19,9 @@ export const generateAESKey = () => {
 };
 
 // AES-256-GCM encryption
-export const encryptMessage = (message, aesKeyPem) => {
+export const encryptMessage = (message, aesKeyBytes) => {
   const iv = forge.random.getBytesSync(12); // 96 bits
-  const cipher = forge.cipher.createCipher('AES-GCM', aesKeyPem);
+  const cipher = forge.cipher.createCipher('AES-GCM', aesKeyBytes);
   cipher.start({ iv: iv });
   cipher.update(forge.util.createBuffer(message, 'utf8'));
   cipher.finish();
@@ -29,18 +29,17 @@ export const encryptMessage = (message, aesKeyPem) => {
   const tag = cipher.mode.tag.getBytes();
   
   // Return format: iv:tag:encrypted (base64 encoded)
-  // Use forge.util.encode64 instead of btoa (which fails on binary)
   return forge.util.encode64(iv + tag + encrypted);
 };
 
 // AES-256-GCM decryption
-export const decryptMessage = (encryptedMessageBase64, aesKeyPem) => {
+export const decryptMessage = (encryptedMessageBase64, aesKeyBytes) => {
   const decoded = forge.util.decode64(encryptedMessageBase64);
   const iv = decoded.substring(0, 12);
   const tag = decoded.substring(12, 28);
   const encrypted = decoded.substring(28);
 
-  const decipher = forge.cipher.createDecipher('AES-GCM', aesKeyPem);
+  const decipher = forge.cipher.createDecipher('AES-GCM', aesKeyBytes);
   decipher.start({ iv: iv, tag: forge.util.createBuffer(tag) });
   decipher.update(forge.util.createBuffer(encrypted));
   const pass = decipher.finish();
