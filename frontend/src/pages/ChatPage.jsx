@@ -34,6 +34,16 @@ export default function ChatPage() {
     } = useChat();
     const navigate = useNavigate();
 
+    // Derive activity indicators for the ACTIVE chat (used by the header)
+    const activeChatId = activeChat?.id || activeChat?._id;
+    const activeChatStatus = activeChatId ? activityStatus[activeChatId] : null;
+    const someoneTyping = activeChatStatus
+        ? Object.values(activeChatStatus).some(s => s.typing)
+        : false;
+    const someoneRecording = activeChatStatus
+        ? Object.values(activeChatStatus).some(s => s.recording)
+        : false;
+
     // UI States
     const [msgInput, setMsgInput] = useState("");
     const [searchEmail, setSearchEmail] = useState("");
@@ -187,6 +197,8 @@ export default function ChatPage() {
         }
     };
 
+    if (!user) return null; // safety: do not render before auth is resolved
+
     return (
         <Box sx={{ display: 'flex', height: '100vh', bgcolor: 'background.default' }}>
             {/* Sidebar */}
@@ -194,9 +206,12 @@ export default function ChatPage() {
                 {/* Header */}
                 <Box sx={{ p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid rgba(0,229,255,0.1)' }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                        <Avatar src={user.avatar || `https://ui-avatars.com/api/?name=${user.name}`} sx={{ border: '2px solid rgba(0,229,255,0.5)' }} />
+                        <Avatar 
+                            src={user.avatar || user.picture || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.displayName || user.name || user.email || 'U')}&background=00e5ff&color=040712`} 
+                            sx={{ border: '2px solid rgba(0,229,255,0.5)' }} 
+                        />
                         <Box>
-                            <Typography variant="subtitle2" fontWeight="bold">{user.displayName || user.name}</Typography>
+                            <Typography variant="subtitle2" fontWeight="bold">{user.displayName || user.name || user.email?.split('@')[0] || 'You'}</Typography>
                             <Typography variant="caption" sx={{ color: '#00e5ff' }}>Online</Typography>
                         </Box>
                     </Box>
@@ -214,9 +229,10 @@ export default function ChatPage() {
                         <Paper elevation={16} sx={{ position: 'absolute', top: 70, left: 16, right: 16, zIndex: 10, bgcolor: 'background.paper', border: '1px solid #00e5ff' }}>
                             <List sx={{ p: 0 }}>
                                 {searchResults.map(u => (
-                                    <ListItem key={u.id || u._id} button onClick={() => handleCreateChat(u)}>
-                                        <ListItemAvatar><Avatar src={u.avatar} sx={{ width: 32, height: 32 }} /></ListItemAvatar>
-                                        <ListItemText primary={u.displayName || u.name} secondary={u.email} />
+                                    <ListItem key={u.id || u._id} onClick={() => handleCreateChat(u)}
+                                        sx={{ cursor: 'pointer', '&:hover': { bgcolor: 'rgba(255,255,255,0.05)' } }}>
+                                        <ListItemAvatar><Avatar src={u.avatar || u.picture} sx={{ width: 32, height: 32 }} /></ListItemAvatar>
+                                        <ListItemText primary={u.displayName || u.name || u.email} secondary={u.email} />
                                     </ListItem>
                                 ))}
                             </List>
