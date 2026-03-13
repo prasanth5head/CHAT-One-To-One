@@ -11,6 +11,7 @@ export default function BackgroundVideo() {
                 height: '100%',
                 zIndex: -1,
                 overflow: 'hidden',
+                background: '#050a15',
                 '&::after': {
                     content: '""',
                     position: 'absolute',
@@ -18,25 +19,9 @@ export default function BackgroundVideo() {
                     left: 0,
                     width: '100%',
                     height: '100%',
-                    backgroundColor: 'rgba(5, 10, 21, 0.75)', // Dark overlay
-                    background: 'radial-gradient(circle, rgba(5,10,21,0.4) 0%, rgba(5,10,21,0.9) 100%)',
+                    background: 'radial-gradient(circle at center, rgba(0,229,255,0.08) 0%, rgba(5,10,21,1) 100%)',
                 }
             }}
-        >
-            <video
-                autoPlay
-                loop
-                muted
-                playsInline
-                style={{
-                    width: '100%',
-                    height: '100%',
-                    objectFit: 'cover',
-                }}
-            >
-                <source src="/background.mp4" type="video/mp4" />
-                Your browser does not support the video tag.
-            </video>
-        </Box>
+        />
     );
 }

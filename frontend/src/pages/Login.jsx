@@ -39,11 +39,41 @@ export default function Login() {
         try {
             const accessToken = tokenResponse.access_token;
             if (!accessToken) throw new Error('No access token received from Google.');
-            const keys = await generateKeyPair();
+            
+            // 1. Get current stored key if it exists
+            const existingPrivateKey = localStorage.getItem('privateKey');
+            const existingUserRaw = localStorage.getItem('user');
+            const existingUser = existingUserRaw ? JSON.parse(existingUserRaw) : null;
+            
+            let keys = null;
+            let shouldUpdatePublicKey = false;
+
+            // 2. Only generate new keys if we don't have them
+            if (!existingPrivateKey) {
+                keys = await generateKeyPair();
+                shouldUpdatePublicKey = true;
+            } else {
+                // We have a private key, we need the public key to send to server
+                // Extract public key from private key to ensure they match
+                try {
+                    const forgePriv = forge.pki.privateKeyFromPem(existingPrivateKey);
+                    const forgePub = forge.pki.setRsaPublicKey(forgePriv.n, forgePriv.e);
+                    keys = {
+                        privateKey: existingPrivateKey,
+                        publicKey: forge.pki.publicKeyToPem(forgePub)
+                    };
+                } catch (e) {
+                    console.warn("Corrupt local key, regenerating...");
+                    keys = await generateKeyPair();
+                    shouldUpdatePublicKey = true;
+                }
+            }
+
             const res = await authAPI.loginWithGoogle({
                 token: accessToken,
-                publicKey: keys.publicKey,
+                publicKey: shouldUpdatePublicKey ? keys.publicKey : undefined,
             });
+
             login(res.data.user, res.data.token, keys.privateKey);
             navigate('/chat');
         } catch (err) {
