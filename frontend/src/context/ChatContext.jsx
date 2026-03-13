@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useRef } from 'react';
-import { chatAPI, messageAPI, userAPI } from '../services/api';
+import { chatAPI, messageAPI, userAPI, mediaAPI } from '../services/api';
 import { socketService } from '../services/socket';
 import { useAuth } from './AuthContext';
 import {
@@ -16,11 +16,11 @@ const ChatContext = createContext();
 export const useChat = () => useContext(ChatContext);
 
 export const ChatProvider = ({ children }) => {
-    const { user } = useAuth();
     const [chats, setChats] = useState([]);
     const [activeChat, setActiveChat] = useState(null);
     const [messages, setMessages] = useState([]);
-    const [typingUsers, setTypingUsers] = useState({});
+    const [activityStatus, setActivityStatus] = useState({}); // { chatId: { userId: { typing, recording } } }
+    const [nicknames, setNicknames] = useState({}); // { friendId: nickname }
     // Cache of { userId -> User object } to avoid repeated API calls
     const userCache = useRef({});
 
@@ -28,6 +28,7 @@ export const ChatProvider = ({ children }) => {
     useEffect(() => {
         if (user) {
             loadChats();
+            loadNicknames();
             const token = localStorage.getItem('token');
             socketService.connect(token, () => {
                 console.log('Connected to STOMP over WebSocket');
@@ -36,6 +37,17 @@ export const ChatProvider = ({ children }) => {
             socketService.disconnect();
         }
     }, [user]);
+
+    const loadNicknames = async () => {
+        try {
+            const res = await userAPI.getNicknames();
+            const map = {};
+            res.data.forEach(n => map[n.friendId] = n.nickname);
+            setNicknames(map);
+        } catch (e) {
+            console.error("Failed to load nicknames:", e);
+        }
+    };
 
     // ── Subscribe to the active chat channel ────────────────────────────────────
     useEffect(() => {
@@ -65,11 +77,16 @@ export const ChatProvider = ({ children }) => {
                 });
             });
 
-            socketService.subscribe(`/topic/chat/${chatId}/typing`, (payload) => {
-                if (payload.userId !== user.id && payload.userId !== user._id) {
-                    setTypingUsers((prev) => ({ ...prev, [chatId]: payload.typing }));
-                    // Auto-clear typing indicator after 3 seconds
-                    setTimeout(() => setTypingUsers((prev) => ({ ...prev, [chatId]: false })), 3000);
+            socketService.subscribe(`/topic/chat/${chatId}/activity`, (payload) => {
+                const currentUserId = user.id || user._id;
+                if (payload.userId !== currentUserId) {
+                    setActivityStatus((prev) => ({
+                        ...prev,
+                        [chatId]: {
+                            ...prev[chatId],
+                            [payload.userId]: { typing: payload.typing, recording: payload.recording }
+                        }
+                    }));
                 }
             });
         };
@@ -193,13 +210,34 @@ export const ChatProvider = ({ children }) => {
         }
     };
 
-    const sendTyping = (isTyping) => {
+    const sendActivity = (activity) => {
+        // activity = { typing: boolean, recording: boolean }
         if (activeChat) {
-            socketService.sendMessage('/app/chat.typing', {
-                chatId: activeChat.id,
-                userId: user.id,
-                typing: isTyping,
+            const chatId = activeChat.id || activeChat._id;
+            const currentUserId = user.id || user._id;
+            socketService.sendMessage('/app/chat.activity', {
+                chatId: chatId,
+                userId: currentUserId,
+                ...activity,
             });
+        }
+    };
+
+    const setNickname = async (friendId, nickname) => {
+        try {
+            await userAPI.setNickname(friendId, nickname);
+            setNicknames(prev => ({ ...prev, [friendId]: nickname }));
+        } catch (e) {
+            console.error("Failed to set nickname:", e);
+        }
+    };
+
+    const updateChatWallpaper = async (chatId, wallpaperUrl) => {
+        try {
+            await chatAPI.updateWallpaper(chatId, wallpaperUrl);
+            setChats(prev => prev.map(c => (c.id === chatId || c._id === chatId) ? { ...c, wallpaperUrl } : c));
+        } catch (e) {
+            console.error("Failed to update wallpaper:", e);
         }
     };
 
@@ -217,7 +255,8 @@ export const ChatProvider = ({ children }) => {
     return (
         <ChatContext.Provider value={{
             chats, activeChat, messages, selectChat,
-            sendMessage, loadChats, sendTyping, typingUsers, createChat
+            sendMessage, loadChats, sendActivity, activityStatus, createChat,
+            nicknames, setNickname, updateChatWallpaper
         }}>
             {children}
         </ChatContext.Provider>

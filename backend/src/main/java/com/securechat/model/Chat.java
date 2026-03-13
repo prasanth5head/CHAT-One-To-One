@@ -19,6 +19,7 @@ public class Chat {
     private boolean isGroup;
     private String groupName;
     private String lastMessage;
+    private String wallpaperUrl; // Custom chat background URL
     private Date updatedAt;
     private Date createdAt = new Date();
 }

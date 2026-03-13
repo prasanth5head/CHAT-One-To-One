@@ -37,4 +37,10 @@ public class ChatService {
     public List<Chat> getUserChats(String userId) {
         return chatRepository.findByParticipantsContaining(userId);
     }
+
+    public Chat updateWallpaper(String chatId, String wallpaperUrl) {
+        Chat chat = chatRepository.findById(chatId).orElseThrow(() -> new RuntimeException("Chat not found"));
+        chat.setWallpaperUrl(wallpaperUrl);
+        return chatRepository.save(chat);
+    }
 }

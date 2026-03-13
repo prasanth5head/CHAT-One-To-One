@@ -23,11 +23,15 @@ export const userAPI = {
     searchUsers: (email) => api.get(`/users/search?email=${encodeURIComponent(email)}`),
     getUserById: (id) => api.get(`/users/${id}`),
     getCurrentUser: () => api.get('/users/me'),
+    updateProfile: (data) => api.put('/users/profile', data),
+    getNicknames: () => api.get('/users/nicknames'),
+    setNickname: (friendId, nickname) => api.post('/users/nickname', { friendId, nickname }),
 };
 
 export const chatAPI = {
     getUserChats: () => api.get('/chats'),
     createOrGetChat: (userId) => api.post(`/chats/${userId}`),
+    updateWallpaper: (chatId, wallpaperUrl) => api.put(`/chats/${chatId}/wallpaper`, { wallpaperUrl }),
 };
 
 export const messageAPI = {
@@ -35,10 +39,10 @@ export const messageAPI = {
 };
 
 export const mediaAPI = {
-    uploadMedia: (file) => {
+    uploadMedia: (file, type = 'auto') => {
         const formData = new FormData();
         formData.append('file', file);
-        return api.post('/media/upload', formData, {
+        return api.post(`/media/upload?type=${type}`, formData, {
             headers: { 'Content-Type': 'multipart/form-data' },
         });
     },

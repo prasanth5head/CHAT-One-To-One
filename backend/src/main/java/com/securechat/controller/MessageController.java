@@ -38,17 +38,18 @@ public class MessageController {
         // Optionally send push notification logic depending on target users
     }
 
-    // Typing indicator
-    @MessageMapping("/chat.typing")
-    public void processTyping(@Payload TypingPayload typingPayload) {
-        messagingTemplate.convertAndSend("/topic/chat/" + typingPayload.getChatId() + "/typing", typingPayload);
+    // Activity indicator (typing, recording)
+    @MessageMapping("/chat.activity")
+    public void processActivity(@Payload ActivityPayload activityPayload) {
+        messagingTemplate.convertAndSend("/topic/chat/" + activityPayload.getChatId() + "/activity", activityPayload);
     }
 }
 
-class TypingPayload {
+class ActivityPayload {
     private String chatId;
     private String userId;
     private boolean typing;
+    private boolean recording;
 
     // Getters and Setters
     public String getChatId() {
@@ -73,5 +74,13 @@ class TypingPayload {
 
     public void setTyping(boolean typing) {
         this.typing = typing;
+    }
+
+    public boolean isRecording() {
+        return recording;
+    }
+
+    public void setRecording(boolean recording) {
+        this.recording = recording;
     }
 }

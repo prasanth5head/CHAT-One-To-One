@@ -16,7 +16,26 @@ public class MediaController {
     private MediaService mediaService;
 
     @PostMapping("/upload")
-    public ResponseEntity<String> uploadMedia(@RequestParam("file") MultipartFile file) {
+    public ResponseEntity<String> uploadMedia(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "type", defaultValue = "auto") String type) {
+        
+        // 1. Basic Type Validation
+        String contentType = file.getContentType();
+        if (contentType == null) return ResponseEntity.badRequest().body("Unknown file type");
+        
+        if (type.equals("image") && !contentType.startsWith("image/")) {
+            return ResponseEntity.badRequest().body("Only images are allowed here");
+        }
+        if (type.equals("audio") && !contentType.startsWith("audio/") && !contentType.contains("webm")) {
+            return ResponseEntity.badRequest().body("Only audio files are allowed here");
+        }
+
+        // 2. Size Validation (5MB limit)
+        if (file.getSize() > 5 * 1024 * 1024) {
+            return ResponseEntity.badRequest().body("File too large. Max 5MB allowed.");
+        }
+
         try {
             String url = mediaService.uploadMedia(file);
             return ResponseEntity.ok(url);

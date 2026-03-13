@@ -17,6 +17,9 @@ public class User {
     private String name;
     private String email;
     private String avatar;
+    private String displayName; // Custom user display name
+    private String chatWallpaperUrl; // Custom chat background URL
     private String publicKey; // Public key for E2EE
+    private Date lastSeen; // For online/offline status
     private Date createdAt = new Date();
 }

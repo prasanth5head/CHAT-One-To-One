@@ -1,6 +1,8 @@
 package com.securechat.controller;
 
 import com.securechat.model.User;
+import com.securechat.model.FriendNickname;
+import com.securechat.repository.FriendNicknameRepository;
 import com.securechat.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -16,6 +18,9 @@ public class UserController {
 
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private FriendNicknameRepository nicknameRepository;
 
     /** Get current user's own profile */
     @GetMapping("/me")
@@ -45,5 +50,34 @@ public class UserController {
                 .filter(u -> !u.getId().equals(currentUserId))
                 .collect(Collectors.toList());
         return ResponseEntity.ok(results);
+    }
+
+    @PutMapping("/profile")
+    public ResponseEntity<User> updateProfile(@RequestBody User userUpdates, Authentication authentication) {
+        String currentUserId = (String) authentication.getPrincipal();
+        return userRepository.findById(currentUserId).map(user -> {
+            if (userUpdates.getDisplayName() != null) user.setDisplayName(userUpdates.getDisplayName());
+            if (userUpdates.getAvatar() != null) user.setAvatar(userUpdates.getAvatar());
+            return ResponseEntity.ok(userRepository.save(user));
+        }).orElse(ResponseEntity.notFound().build());
+    }
+
+    @GetMapping("/nicknames")
+    public ResponseEntity<List<FriendNickname>> getNicknames(Authentication authentication) {
+        String currentUserId = (String) authentication.getPrincipal();
+        return ResponseEntity.ok(nicknameRepository.findByUserId(currentUserId));
+    }
+
+    @PostMapping("/nickname")
+    public ResponseEntity<FriendNickname> setNickname(@RequestBody FriendNickname nicknameRequest, Authentication authentication) {
+        String currentUserId = (String) authentication.getPrincipal();
+        FriendNickname nickname = nicknameRepository.findByUserIdAndFriendId(currentUserId, nicknameRequest.getFriendId())
+                .orElse(new FriendNickname());
+        
+        nickname.setUserId(currentUserId);
+        nickname.setFriendId(nicknameRequest.getFriendId());
+        nickname.setNickname(nicknameRequest.getNickname());
+        
+        return ResponseEntity.ok(nicknameRepository.save(nickname));
     }
 }

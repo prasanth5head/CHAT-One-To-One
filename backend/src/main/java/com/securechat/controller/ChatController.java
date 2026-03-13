@@ -27,4 +27,15 @@ public class ChatController {
         String currentUserId = (String) authentication.getPrincipal();
         return ResponseEntity.ok(chatService.getUserChats(currentUserId));
     }
+
+    @PutMapping("/{chatId}/wallpaper")
+    public ResponseEntity<Chat> updateWallpaper(@PathVariable String chatId, @RequestBody WallpaperRequest request) {
+        return ResponseEntity.ok(chatService.updateWallpaper(chatId, request.getWallpaperUrl()));
+    }
+}
+
+class WallpaperRequest {
+    private String wallpaperUrl;
+    public String getWallpaperUrl() { return wallpaperUrl; }
+    public void setWallpaperUrl(String wallpaperUrl) { this.wallpaperUrl = wallpaperUrl; }
 }

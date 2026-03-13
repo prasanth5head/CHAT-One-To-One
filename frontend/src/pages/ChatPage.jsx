@@ -1,26 +1,59 @@
 import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useChat } from '../context/ChatContext';
-import { userAPI } from '../services/api';
-import { Box, Typography, TextField, IconButton, List, ListItem, ListItemAvatar, ListItemText, Avatar, Paper, InputAdornment, Badge } from '@mui/material';
-import SearchIcon from '@mui/icons-material/Search';
-import SendIcon from '@mui/icons-material/Send';
-import ExitToAppIcon from '@mui/icons-material/ExitToApp';
-import GroupIcon from '@mui/icons-material/Group';
-import PersonIcon from '@mui/icons-material/Person';
-import SettingsIcon from '@mui/icons-material/Settings';
-import AttachFileIcon from '@mui/icons-material/AttachFile';
-import LockIcon from '@mui/icons-material/Lock';
+import { userAPI, mediaAPI } from '../services/api';
+import { 
+    Box, Typography, TextField, IconButton, List, ListItem, ListItemAvatar, 
+    ListItemText, Avatar, Paper, InputAdornment, Badge, Button,
+    Dialog, DialogTitle, DialogContent, DialogActions, Tooltip
+} from '@mui/material';
+import {
+    Search as SearchIcon,
+    Send as SendIcon,
+    ExitToApp as ExitToAppIcon,
+    Group as GroupIcon,
+    Person as PersonIcon,
+    Settings as SettingsIcon,
+    Image as ImageIcon,
+    Mic as MicIcon,
+    Stop as StopIcon,
+    EmojiEmotions as EmojiIcon,
+    Lock as LockIcon,
+    Close as CloseIcon,
+    PhotoCamera as PhotoCameraIcon
+} from '@mui/icons-material';
 
 export default function ChatPage() {
-    const { user, logout } = useAuth();
-    const { chats, activeChat, messages, selectChat, sendMessage, loadChats, sendTyping, typingUsers, createChat } = useChat();
+    const { user, login } = useAuth();
+    const { 
+        chats, activeChat, messages, selectChat, sendMessage, 
+        loadChats, sendActivity, activityStatus, createChat,
+        nicknames, setNickname, updateChatWallpaper 
+    } = useChat();
+    const navigate = useNavigate();
 
+    // UI States
     const [msgInput, setMsgInput] = useState("");
     const [searchEmail, setSearchEmail] = useState("");
     const [searchResults, setSearchResults] = useState([]);
+    const [settingsOpen, setSettingsOpen] = useState(false);
+    
+    // User Profile Update States
+    const [newDisplayName, setNewDisplayName] = useState(user?.displayName || "");
+    const [newAvatar, setNewAvatar] = useState(null);
+    const [avatarPreview, setAvatarPreview] = useState(user?.avatar || "");
 
+    // Media States
+    const [selectedImage, setSelectedImage] = useState(null);
+    const [imagePreview, setImagePreview] = useState(null);
+    const [isRecording, setIsRecording] = useState(false);
+    const [audioBlob, setAudioBlob] = useState(null);
+    const [recordTime, setRecordTime] = useState(0);
+    
     const messagesEndRef = useRef(null);
+    const mediaRecorder = useRef(null);
+    const timerRef = useRef(null);
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -44,71 +77,145 @@ export default function ChatPage() {
         setSearchResults([]);
     };
 
-    const handleSend = (e) => {
-        e.preventDefault();
-        if (msgInput.trim() === '') return;
-        sendMessage(msgInput, null, 'text');
-        setMsgInput("");
+    const handleSend = async (e) => {
+        if (e) e.preventDefault();
+        if ((!msgInput.trim() && !selectedImage && !audioBlob) || !activeChat) return;
+
+        let mediaUrl = null;
+        let messageType = 'text';
+
+        try {
+            if (selectedImage) {
+                const uploadRes = await mediaAPI.uploadMedia(selectedImage, 'image');
+                mediaUrl = uploadRes.data;
+                messageType = 'image';
+            } else if (audioBlob) {
+                const uploadRes = await mediaAPI.uploadMedia(audioBlob, 'video');
+                mediaUrl = uploadRes.data;
+                messageType = 'voice';
+            }
+
+            sendMessage(msgInput, mediaUrl, messageType);
+            setMsgInput("");
+            setSelectedImage(null);
+            setImagePreview(null);
+            setAudioBlob(null);
+            sendActivity({ typing: false, recording: false });
+        } catch (e) {
+            console.error("Upload/Send failed:", e);
+        }
     };
 
     const handleTyping = (e) => {
         setMsgInput(e.target.value);
-        sendTyping(true);
-        setTimeout(() => {
-            sendTyping(false); // Debounce
-        }, 2000);
+        sendActivity({ typing: e.target.value.length > 0, recording: isRecording });
+    };
+
+    const handleImageSelect = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            if (file.size > 5 * 1024 * 1024) {
+                alert("File too large (max 5MB)");
+                return;
+            }
+            setSelectedImage(file);
+            const reader = new FileReader();
+            reader.onloadend = () => setImagePreview(reader.result);
+            reader.readAsDataURL(file);
+        }
+    };
+
+    const startRecording = async () => {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            mediaRecorder.current = new MediaRecorder(stream);
+            const chunks = [];
+            mediaRecorder.current.ondataavailable = (e) => chunks.push(e.data);
+            mediaRecorder.current.onstop = () => {
+                const blob = new Blob(chunks, { type: 'audio/webm' });
+                setAudioBlob(blob);
+                stream.getTracks().forEach(track => track.stop());
+            };
+            mediaRecorder.current.start();
+            setIsRecording(true);
+            setRecordTime(0);
+            sendActivity({ typing: msgInput.length > 0, recording: true });
+            timerRef.current = setInterval(() => setRecordTime(v => v + 1), 1000);
+        } catch (err) {
+            alert("Microphone access denied.");
+        }
+    };
+
+    const stopRecording = () => {
+        if (mediaRecorder.current && isRecording) {
+            mediaRecorder.current.stop();
+            setIsRecording(false);
+            clearInterval(timerRef.current);
+            sendActivity({ typing: msgInput.length > 0, recording: false });
+        }
+    };
+
+    const handleUpdateProfile = async () => {
+        try {
+            let avatarUrl = user.avatar;
+            if (newAvatar) {
+                const up = await mediaAPI.uploadMedia(newAvatar, 'image');
+                avatarUrl = up.data;
+            }
+            const res = await userAPI.updateProfile({ 
+                displayName: newDisplayName, 
+                avatar: avatarUrl 
+            });
+            // Update local state
+            const updatedUser = { ...user, ...res.data };
+            localStorage.setItem('user', JSON.stringify(updatedUser));
+            // Trigger a re-render/logic update by calling login with same token
+            window.location.reload(); // Simplest way to broadcast profile change
+        } catch (e) {
+            console.error("Profile update failed", e);
+        }
+    };
+
+    const handleWallpaperUpload = async (e) => {
+        const file = e.target.files[0];
+        if (file && activeChat) {
+            try {
+                const up = await mediaAPI.uploadMedia(file, 'image');
+                updateChatWallpaper(activeChat.id || activeChat._id, up.data);
+            } catch (e) { console.error(e); }
+        }
     };
 
     return (
         <Box sx={{ display: 'flex', height: '100vh', bgcolor: 'background.default' }}>
-
             {/* Sidebar */}
             <Box sx={{ width: 320, borderRight: '1px solid rgba(0,229,255,0.1)', display: 'flex', flexDirection: 'column', bgcolor: 'background.paper', zIndex: 2 }}>
-
                 {/* Header */}
                 <Box sx={{ p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid rgba(0,229,255,0.1)' }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                        <Badge overlap="circular" anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }} variant="dot" color="success">
-                            <Avatar src={user.avatar || `https://ui-avatars.com/api/?name=${user.name}`} sx={{ border: '2px solid rgba(0,229,255,0.5)' }} />
-                        </Badge>
+                        <Avatar src={user.avatar || `https://ui-avatars.com/api/?name=${user.name}`} sx={{ border: '2px solid rgba(0,229,255,0.5)' }} />
                         <Box>
-                            <Typography variant="subtitle2" fontWeight="bold">{user.name}</Typography>
-                            <Typography variant="caption" sx={{ color: '#00e5ff', textShadow: '0 0 5px rgba(0,229,255,0.5)' }}>Online</Typography>
+                            <Typography variant="subtitle2" fontWeight="bold">{user.displayName || user.name}</Typography>
+                            <Typography variant="caption" sx={{ color: '#00e5ff' }}>Online</Typography>
                         </Box>
                     </Box>
-                    <IconButton onClick={logout} size="small" sx={{ color: 'error.main', '&:hover': { bgcolor: 'error.dark', color: '#fff', boxShadow: '0 0 10px red' } }}>
-                        <ExitToAppIcon fontSize="small" />
-                    </IconButton>
+                    <Box>
+                        <IconButton onClick={() => setSettingsOpen(true)} size="small" color="primary"><SettingsIcon fontSize="small"/></IconButton>
+                        <IconButton onClick={() => { localStorage.clear(); navigate('/login'); }} size="small" color="error"><ExitToAppIcon fontSize="small" /></IconButton>
+                    </Box>
                 </Box>
 
                 {/* Search */}
                 <Box sx={{ p: 2, position: 'relative' }}>
-                    <TextField
-                        fullWidth
-                        size="small"
-                        placeholder="Search users by email..."
-                        value={searchEmail}
-                        onChange={handleSearch}
-                        InputProps={{
-                            startAdornment: (
-                                <InputAdornment position="start">
-                                    <SearchIcon fontSize="small" color="primary" />
-                                </InputAdornment>
-                            ),
-                            sx: { borderRadius: 6, bgcolor: 'rgba(0,0,0,0.3)' }
-                        }}
-                    />
-
-                    {/* Search Results */}
+                    <TextField fullWidth size="small" placeholder="Search friends..." value={searchEmail} onChange={handleSearch}
+                        InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" color="primary" /></InputAdornment>, sx: { borderRadius: 6, bgcolor: 'rgba(0,0,0,0.3)' }}} />
                     {searchResults.length > 0 && (
-                        <Paper elevation={16} sx={{ position: 'absolute', top: 70, left: 16, right: 16, zIndex: 10, bgcolor: 'background.paper', border: '1px solid #00e5ff', boxShadow: '0 0 15px rgba(0,229,255,0.3)' }}>
+                        <Paper elevation={16} sx={{ position: 'absolute', top: 70, left: 16, right: 16, zIndex: 10, bgcolor: 'background.paper', border: '1px solid #00e5ff' }}>
                             <List sx={{ p: 0 }}>
                                 {searchResults.map(u => (
-                                    <ListItem key={u.id || u._id} button onClick={() => handleCreateChat(u)} sx={{ '&:hover': { bgcolor: 'rgba(0,229,255,0.1)' } }}>
-                                        <ListItemAvatar>
-                                            <Avatar src={u.avatar || `https://ui-avatars.com/api/?name=${u.name}`} sx={{ width: 32, height: 32, border: 'none', boxShadow: 'none' }} />
-                                        </ListItemAvatar>
-                                        <ListItemText primary={u.name} secondary={u.email} primaryTypographyProps={{ variant: 'body2' }} secondaryTypographyProps={{ variant: 'caption', color: 'text.secondary' }} />
+                                    <ListItem key={u.id || u._id} button onClick={() => handleCreateChat(u)}>
+                                        <ListItemAvatar><Avatar src={u.avatar} sx={{ width: 32, height: 32 }} /></ListItemAvatar>
+                                        <ListItemText primary={u.displayName || u.name} secondary={u.email} />
                                     </ListItem>
                                 ))}
                             </List>
@@ -121,35 +228,22 @@ export default function ChatPage() {
                     {chats.map(chat => {
                         const chatId = chat.id || chat._id;
                         const isSelected = (activeChat?.id || activeChat?._id) === chatId;
-                        const chatName = chat.isGroup ? chat.groupName : (chat.otherUser?.name || "Direct Chat");
-                        
+                        const otherId = !chat.isGroup ? chat.participants.find(p => p !== (user.id || user._id)) : null;
+                        const nickname = otherId ? nicknames[otherId] : null;
+                        const chatName = chat.isGroup ? chat.groupName : (nickname || chat.otherUser?.displayName || chat.otherUser?.name || "Direct Chat");
+                        const status = activityStatus[chatId];
+                        const someoneRecording = status ? Object.values(status).some(s => s.recording) : false;
+                        const someoneTyping = status ? Object.values(status).some(s => s.typing) : false;
+
                         return (
-                            <ListItem
-                                key={chatId}
-                                button
-                                onClick={() => selectChat(chat)}
-                                sx={{
-                                    borderRadius: 2,
-                                    mb: 0.5,
-                                    bgcolor: isSelected ? 'rgba(0,229,255,0.15)' : 'transparent',
-                                    border: isSelected ? '1px solid rgba(0,229,255,0.3)' : '1px solid transparent',
-                                    boxShadow: isSelected ? 'inset 0 0 10px rgba(0,229,255,0.1)' : 'none',
-                                    '&:hover': { bgcolor: isSelected ? 'rgba(0,229,255,0.2)' : 'rgba(255,255,255,0.05)' }
-                                }}
-                            >
+                            <ListItem key={chatId} button onClick={() => selectChat(chat)} sx={{ borderRadius: 2, mb: 0.5, bgcolor: isSelected ? 'rgba(0,229,255,0.15)' : 'transparent', border: isSelected ? '1px solid rgba(0,229,255,0.3)' : '1px solid transparent' }}>
                                 <ListItemAvatar>
-                                    <Badge overlap="circular" anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }} variant="dot" color="success" invisible={!typingUsers[chatId]}>
-                                        <Avatar sx={{ bgcolor: isSelected ? 'primary.main' : 'background.default', color: isSelected ? '#000' : 'primary.main', border: '1px solid #00e5ff', boxShadow: isSelected ? '0 0 10px rgba(0,229,255,0.8)' : 'none' }}>
-                                            {chat.isGroup ? <GroupIcon /> : <PersonIcon />}
-                                        </Avatar>
+                                    <Badge overlap="circular" anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }} variant="dot" color="success" invisible={!someoneTyping && !someoneRecording}>
+                                        <Avatar sx={{ border: '1px solid #00e5ff' }}>{chat.isGroup ? <GroupIcon /> : <PersonIcon />}</Avatar>
                                     </Badge>
                                 </ListItemAvatar>
-                                <ListItemText
-                                    primary={chatName}
-                                    secondary={typingUsers[chatId] ? "typing..." : (chat.lastMessage || "No messages yet")}
-                                    primaryTypographyProps={{ variant: 'subtitle2', noWrap: true, color: isSelected ? '#fff' : 'text.primary' }}
-                                    secondaryTypographyProps={{ variant: 'caption', noWrap: true, color: typingUsers[chatId] ? '#00e5ff' : 'text.secondary' }}
-                                />
+                                <ListItemText primary={chatName} secondary={someoneRecording ? "recording..." : (someoneTyping ? "typing..." : (chat.lastMessage || "No messages"))}
+                                    secondaryTypographyProps={{ color: (someoneTyping || someoneRecording) ? 'primary.main' : 'text.secondary' }} />
                             </ListItem>
                         );
                     })}
@@ -159,56 +253,53 @@ export default function ChatPage() {
             {/* Main Chat Area */}
             {activeChat ? (
                 <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative' }}>
-
                     {/* Header */}
-                    <Paper elevation={4} sx={{ height: 64, px: 3, display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderRadius: 0, borderBottom: '1px solid rgba(0,229,255,0.1)', bgcolor: 'rgba(13, 24, 46, 0.8)', backdropFilter: 'blur(10px)', zIndex: 1, boxShadow: '0 4px 20px rgba(0,0,0,0.5)' }}>
+                    <Paper elevation={4} sx={{ height: 64, px: 3, display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderRadius: 0, bgcolor: 'rgba(13, 24, 46, 0.8)', backdropFilter: 'blur(10px)', zIndex: 1 }}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                            <Avatar sx={{ bgcolor: 'primary.main', color: '#000', boxShadow: '0 0 10px rgba(0,229,255,0.5)' }}>
-                                {activeChat.isGroup ? <GroupIcon /> : <PersonIcon />}
-                            </Avatar>
+                            <Avatar sx={{ bgcolor: 'primary.main', color: '#000' }}>{activeChat.isGroup ? <GroupIcon /> : <PersonIcon />}</Avatar>
                             <Box>
                                 <Typography variant="subtitle1" fontWeight="bold">
-                                    {activeChat.isGroup ? activeChat.groupName : (activeChat.otherUser?.name || "Direct Chat")}
+                                    {!activeChat.isGroup && nicknames[activeChat.participants.find(p => p !== (user.id || user._id))] 
+                                        || (activeChat.isGroup ? activeChat.groupName : (activeChat.otherUser?.displayName || activeChat.otherUser?.name))}
                                 </Typography>
-                                <Typography variant="caption" color="text.secondary">
-                                    {typingUsers[activeChat.id || activeChat._id] ? (
-                                        <span style={{ color: '#00e5ff', textShadow: '0 0 5px rgba(0,229,255,0.8)' }}>typing...</span>
-                                    ) : "Encrypted Connection"}
+                                <Typography variant="caption" color="primary.main">
+                                    {someoneRecording ? "recording..." : (someoneTyping ? "typing..." : "Encrypted")}
                                 </Typography>
                             </Box>
                         </Box>
-                        <Box>
-                            <IconButton color="primary" sx={{ '&:hover': { boxShadow: '0 0 10px rgba(0,229,255,0.3)', bgcolor: 'rgba(0,229,255,0.1)' } }}><SearchIcon /></IconButton>
-                            <IconButton color="primary" sx={{ '&:hover': { boxShadow: '0 0 10px rgba(0,229,255,0.3)', bgcolor: 'rgba(0,229,255,0.1)' } }}><SettingsIcon /></IconButton>
+                        <Box sx={{ display: 'flex', gap: 1 }}>
+                            <Tooltip title="Set Chat Wallpaper">
+                                <IconButton color="primary" component="label"><ImageIcon /><input type="file" hidden accept="image/*" onChange={handleWallpaperUpload} /></IconButton>
+                            </Tooltip>
+                            {!activeChat.isGroup && (
+                                <Tooltip title="Set Nickname">
+                                    <IconButton color="primary" onClick={() => {
+                                        const nick = prompt("Enter nickname for this friend:");
+                                        if (nick !== null) setNickname(activeChat.participants.find(p => p !== (user.id || user._id)), nick);
+                                    }}><EmojiIcon /></IconButton>
+                                </Tooltip>
+                            )}
                         </Box>
                     </Paper>
 
-                    {/* Messages Wrapper */}
-                    <Box sx={{ flex: 1, overflowY: 'auto', p: 3, display: 'flex', flexDirection: 'column', gap: 2, bgcolor: 'rgba(5, 10, 21, 0.9)', backgroundImage: 'radial-gradient(circle at center, rgba(0,229,255,0.03) 0%, transparent 70%)' }}>
+                    {/* Messages */}
+                    <Box sx={{ 
+                        flex: 1, overflowY: 'auto', p: 3, display: 'flex', flexDirection: 'column', gap: 2, 
+                        backgroundImage: activeChat.wallpaperUrl ? `url(${activeChat.wallpaperUrl})` : 'none',
+                        backgroundSize: 'cover', backgroundPosition: 'center', bgcolor: '#050a15' 
+                    }}>
                         {messages.map((msg, i) => {
-                            const isMine = msg.senderId === user.id;
+                            const isMine = msg.senderId === (user.id || user._id);
                             return (
                                 <Box key={i} sx={{ display: 'flex', justifyContent: isMine ? 'flex-end' : 'flex-start' }}>
-                                    <Paper
-                                        elevation={isMine ? 8 : 2}
-                                        sx={{
-                                            maxWidth: '70%', p: 1.5, px: 2,
-                                            bgcolor: isMine ? 'rgba(0, 229, 255, 0.15)' : 'background.paper',
-                                            color: isMine ? '#fff' : 'text.primary',
-                                            borderRadius: isMine ? '20px 20px 0 20px' : '20px 20px 20px 0',
-                                            border: isMine ? '1px solid rgba(0,229,255,0.5)' : '1px solid rgba(255,255,255,0.1)',
-                                            boxShadow: isMine ? '0 0 15px rgba(0,229,255,0.15)' : 'none',
-                                        }}
-                                    >
-                                        {msg.messageType === 'text' && (
-                                            <Typography variant="body2" sx={{ wordBreak: 'break-word', lineHeight: 1.5 }}>
-                                                {msg.text || msg.encryptedMessage}
-                                            </Typography>
-                                        )}
-                                        {msg.messageType === 'image' && (
-                                            <img src={msg.mediaUrl} alt="attachment" style={{ maxWidth: '100%', borderRadius: 8, marginTop: 4 }} />
-                                        )}
-                                        <Typography variant="caption" sx={{ display: 'block', mt: 1, textAlign: 'right', color: isMine ? 'rgba(255,255,255,0.5)' : 'text.secondary', fontSize: '0.65rem' }}>
+                                    <Paper sx={{ 
+                                        p: 1.5, maxWidth: '75%', borderRadius: isMine ? '20px 20px 5px 20px' : '20px 20px 20px 5px',
+                                        bgcolor: isMine ? 'primary.main' : 'rgba(255,255,255,0.08)', color: isMine ? '#000' : '#fff'
+                                    }}>
+                                        {msg.messageType === 'image' && <img src={msg.mediaUrl} style={{ maxWidth: '100%', borderRadius: 8, mb: 1 }} />}
+                                        {msg.messageType === 'voice' && <audio src={msg.mediaUrl} controls style={{ maxWidth: '200px', filter: isMine ? 'invert(1)' : 'none' }} />}
+                                        <Typography variant="body2">{msg.text}</Typography>
+                                        <Typography variant="caption" sx={{ display: 'block', textAlign: 'right', opacity: 0.6, mt: 0.5 }}>
                                             {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                         </Typography>
                                     </Paper>
@@ -218,53 +309,63 @@ export default function ChatPage() {
                         <div ref={messagesEndRef} />
                     </Box>
 
-                    {/* Input Area */}
-                    <Paper elevation={12} component="form" onSubmit={handleSend} sx={{ p: 2, display: 'flex', alignItems: 'center', gap: 1, borderRadius: 0, borderTop: '1px solid rgba(0,229,255,0.2)', bgcolor: 'background.paper', zIndex: 1 }}>
-                        <IconButton color="primary" sx={{ '&:hover': { boxShadow: '0 0 10px rgba(0,229,255,0.3)', bgcolor: 'rgba(0,229,255,0.1)' } }}>
-                            <AttachFileIcon />
-                        </IconButton>
-                        <TextField
-                            fullWidth
-                            variant="outlined"
-                            size="small"
-                            placeholder="Message securely..."
-                            value={msgInput}
-                            onChange={handleTyping}
-                            sx={{
-                                '& .MuiOutlinedInput-root': { borderRadius: 8, bgcolor: 'rgba(0,0,0,0.4)' },
-                            }}
-                        />
-                        <IconButton
-                            type="submit"
-                            disabled={!msgInput.trim()}
-                            sx={{
-                                bgcolor: msgInput.trim() ? 'primary.main' : 'transparent',
-                                color: msgInput.trim() ? '#000' : 'text.secondary',
-                                '&:hover': { bgcolor: 'primary.light', boxShadow: '0 0 15px #00e5ff' },
-                                transition: 'all 0.3s'
-                            }}
-                        >
-                            <SendIcon fontSize="small" />
-                        </IconButton>
-                    </Paper>
+                    {/* Media Previews */}
+                    {imagePreview && (
+                        <Box sx={{ p: 1, bgcolor: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', gap: 2 }}>
+                            <img src={imagePreview} style={{ height: 50, borderRadius: 4 }} />
+                            <IconButton color="error" onClick={() => { setSelectedImage(null); setImagePreview(null); }}><CloseIcon /></IconButton>
+                        </Box>
+                    )}
+                    {isRecording && (
+                        <Box sx={{ p: 1, bgcolor: 'rgba(211,47,47,0.2)', display: 'flex', alignItems: 'center', gap: 2 }}>
+                            <Box sx={{ width: 10, height: 10, bgcolor: 'error.main', borderRadius: '50%', animation: 'pulse 1s infinite' }} />
+                            <Typography color="error">Recording... {recordTime}s</Typography>
+                        </Box>
+                    )}
 
+                    {/* Input */}
+                    <Box component="form" onSubmit={handleSend} sx={{ p: 2, display: 'flex', alignItems: 'center', gap: 1, bgcolor: 'background.paper' }}>
+                        <IconButton component="label" color="primary"><ImageIcon /><input type="file" hidden accept="image/*" onChange={handleImageSelect} /></IconButton>
+                        <IconButton color={isRecording ? "error" : "primary"} onClick={isRecording ? stopRecording : startRecording}><MicIcon /></IconButton>
+                        <TextField fullWidth size="small" placeholder="Message..." value={msgInput} onChange={handleTyping} />
+                        <IconButton type="submit" color="primary" sx={{ bgcolor: 'primary.main', color: '#000', '&:hover': { bgcolor: 'primary.light' } }}><SendIcon /></IconButton>
+                    </Box>
                 </Box>
             ) : (
-                <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', bgcolor: 'rgba(5, 10, 21, 0.9)' }}>
-                    <Box sx={{
-                        width: 100, height: 100, borderRadius: '50%', border: '2px solid #00e5ff',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 3,
-                        boxShadow: '0 0 30px rgba(0,229,255,0.4)', bgcolor: 'rgba(0,229,255,0.05)'
-                    }}>
-                        <LockIcon sx={{ fontSize: 50, color: '#00e5ff', filter: 'drop-shadow(0 0 10px rgba(0,229,255,0.8))' }} />
-                    </Box>
-                    <Typography variant="h5" fontWeight="bold" sx={{ textShadow: '0 0 10px rgba(0,229,255,0.5)' }}>SecureChat for Web</Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ mt: 1, maxWidth: 300, textAlign: 'center' }}>
-                        End-to-end encrypted messaging. Click on a chat from the sidebar or search for users by email.
-                    </Typography>
+                <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', opacity: 0.5 }}>
+                    <LockIcon sx={{ fontSize: 100, color: 'primary.main', mb: 2 }} />
+                    <Typography variant="h5">Select a secure conversation</Typography>
                 </Box>
             )}
 
+            {/* Profile Settings Modal */}
+            <Dialog open={settingsOpen} onClose={() => setSettingsOpen(false)} PaperProps={{ sx: { bgcolor: 'background.paper', backgroundImage: 'none' } }}>
+                <DialogTitle>Profile Settings</DialogTitle>
+                <DialogContent>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, pt: 1 }}>
+                        <Badge overlap="circular" anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }} 
+                            badgeContent={<IconButton component="label" size="small" sx={{ bgcolor: 'primary.main', color: '#000' }}><PhotoCameraIcon fontSize="inherit"/><input type="file" hidden accept="image/*" onChange={(e)=>{
+                                const f = e.target.files[0];
+                                if(f){ setNewAvatar(f); setAvatarPreview(URL.createObjectURL(f)); }
+                            }}/></IconButton>}>
+                            <Avatar src={avatarPreview} sx={{ width: 100, height: 100, border: '3px solid #00e5ff' }} />
+                        </Badge>
+                        <TextField fullWidth label="Display Name" value={newDisplayName} onChange={(e)=>setNewDisplayName(e.target.value)} />
+                    </Box>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setSettingsOpen(false)}>Cancel</Button>
+                    <Button variant="contained" onClick={handleUpdateProfile}>Save Changes</Button>
+                </DialogActions>
+            </Dialog>
+
+            <style>{`
+                @keyframes pulse {
+                    0% { transform: scale(1); opacity: 1; }
+                    50% { transform: scale(1.1); opacity: 0.5; }
+                    100% { transform: scale(1); opacity: 1; }
+                }
+            `}</style>
         </Box>
     );
 }
