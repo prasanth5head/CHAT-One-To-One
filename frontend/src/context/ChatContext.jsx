@@ -41,8 +41,11 @@ export const ChatProvider = ({ children }) => {
     useEffect(() => {
         if (!activeChat) return;
 
+        const chatId = activeChat.id || activeChat._id;
+        console.log("Switching to chat:", chatId);
+        
         setMessages([]);
-        loadMessages(activeChat.id);
+        loadMessages(chatId);
 
         // Wait for socket to be connected, retry if needed
         const subscribe = () => {
@@ -88,12 +91,16 @@ export const ChatProvider = ({ children }) => {
             if (myEncryptedKey && privateKeyPem) {
                 const aesKeyBytes = decryptAESKeyWithRSA(myEncryptedKey, privateKeyPem);
                 const text = decryptMessage(msg.encryptedMessage, aesKeyBytes);
+                console.log(`Successfully decrypted msg ${msg.id || msg._id}`);
                 return { ...msg, text };
-            } else if (!myEncryptedKey) {
-                console.warn(`No encrypted key found for user ${myId} in message`, msg.encryptedKeys);
+            } else {
+                console.warn(`Decryption skipped: Key found? ${!!myEncryptedKey}, PrivateKey found? ${!!privateKeyPem}`);
+                if (!myEncryptedKey) {
+                    console.warn(`My ID ${myId} not found in keys:`, Object.keys(msg.encryptedKeys || {}));
+                }
             }
         } catch (e) {
-            console.warn('Decryption failed for message:', msg.id || msg._id, e.message);
+            console.warn('Decryption error for message:', msg.id || msg._id, e.message);
         }
         return msg; // Return raw (renders as ciphertext if decryption fails)
     };
