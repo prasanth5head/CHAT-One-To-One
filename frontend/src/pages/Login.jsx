@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { authAPI } from '../services/api';
 import { generateKeyPair } from '../utils/encryption';
+import forge from 'node-forge';
 import {
     Box,
     Typography,

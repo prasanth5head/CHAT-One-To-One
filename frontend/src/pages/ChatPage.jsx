@@ -25,7 +25,7 @@ import {
 } from '@mui/icons-material';
 
 export default function ChatPage() {
-    const { user, login } = useAuth();
+    const { user, logout } = useAuth();
     const { 
         chats, activeChat, messages, selectChat, sendMessage, 
         loadChats, sendActivity, activityStatus, createChat,
@@ -201,7 +201,7 @@ export default function ChatPage() {
                     </Box>
                     <Box>
                         <IconButton onClick={() => setSettingsOpen(true)} size="small" color="primary"><SettingsIcon fontSize="small"/></IconButton>
-                        <IconButton onClick={() => { localStorage.clear(); navigate('/login'); }} size="small" color="error"><ExitToAppIcon fontSize="small" /></IconButton>
+                        <IconButton onClick={() => { logout(); navigate('/login'); }} size="small" color="error"><ExitToAppIcon fontSize="small" /></IconButton>
                     </Box>
                 </Box>
 
