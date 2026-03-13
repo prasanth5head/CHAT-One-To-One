@@ -229,7 +229,7 @@ export default function ChatPage() {
                     {chats.map(chat => {
                         const chatId = chat.id || chat._id;
                         const isSelected = (activeChat?.id || activeChat?._id) === chatId;
-                        const otherId = !chat.isGroup ? chat.participants.find(p => p !== (user.id || user._id)) : null;
+                        const otherId = !chat.isGroup ? chat.participants?.find(p => p !== (user.id || user._id)) : null;
                         const nickname = otherId ? nicknames[otherId] : null;
                         const chatName = chat.isGroup ? chat.groupName : (nickname || chat.otherUser?.displayName || chat.otherUser?.name || "Direct Chat");
                         const status = activityStatus[chatId];
@@ -237,12 +237,14 @@ export default function ChatPage() {
                         const someoneTyping = status ? Object.values(status).some(s => s.typing) : false;
 
                         return (
-                            <ListItem key={chatId} button onClick={() => selectChat(chat)} 
+                            <ListItem key={chatId} onClick={() => selectChat(chat)} 
                                 sx={{ 
                                     borderRadius: 2, mb: 0.5, 
                                     bgcolor: isSelected ? 'rgba(0,229,255,0.15)' : 'transparent', 
                                     border: isSelected ? '1px solid rgba(0,229,255,0.3)' : '1px solid transparent',
                                     position: 'relative',
+                                    cursor: 'pointer',
+                                    '&:hover': { bgcolor: isSelected ? 'rgba(0,229,255,0.2)' : 'rgba(255,255,255,0.05)' },
                                     '&:hover .delete-chat-btn': { opacity: 1 }
                                 }}
                             >
@@ -283,23 +285,32 @@ export default function ChatPage() {
                             <Avatar sx={{ bgcolor: 'primary.main', color: '#000' }}>{activeChat.isGroup ? <GroupIcon /> : <PersonIcon />}</Avatar>
                             <Box>
                                 <Typography variant="subtitle1" fontWeight="bold">
-                                    {!activeChat.isGroup && nicknames[activeChat.participants.find(p => p !== (user.id || user._id))] 
-                                        || (activeChat.isGroup ? activeChat.groupName : (activeChat.otherUser?.displayName || activeChat.otherUser?.name))}
+                                    {(() => {
+                                        if (activeChat.isGroup) return activeChat.groupName;
+                                        const otherId = activeChat.participants?.find(p => p !== (user.id || user._id));
+                                        const nick = nicknames[otherId];
+                                        return nick || activeChat.otherUser?.displayName || activeChat.otherUser?.name || "Direct Chat";
+                                    })()}
                                 </Typography>
                                 <Typography variant="caption" color="primary.main">
-                                    {someoneRecording ? "recording..." : (someoneTyping ? "typing..." : "Encrypted")}
+                                    {someoneRecording ? "recording..." : (someoneTyping ? "typing..." : "Encrypted Connection")}
                                 </Typography>
                             </Box>
                         </Box>
                         <Box sx={{ display: 'flex', gap: 1 }}>
                             <Tooltip title="Set Chat Wallpaper">
-                                <IconButton color="primary" component="label"><ImageIcon /><input type="file" hidden accept="image/*" onChange={handleWallpaperUpload} /></IconButton>
+                                <IconButton color="primary" component="label">
+                                    <ImageIcon />
+                                    <input type="file" hidden accept="image/*" onChange={handleWallpaperUpload} />
+                                </IconButton>
                             </Tooltip>
                             {!activeChat.isGroup && (
                                 <Tooltip title="Set Nickname">
                                     <IconButton color="primary" onClick={() => {
+                                        const otherId = activeChat.participants?.find(p => p !== (user.id || user._id));
+                                        if (!otherId) return;
                                         const nick = prompt("Enter nickname for this friend:");
-                                        if (nick !== null) setNickname(activeChat.participants.find(p => p !== (user.id || user._id)), nick);
+                                        if (nick !== null) setNickname(otherId, nick);
                                     }}><EmojiIcon /></IconButton>
                                 </Tooltip>
                             )}
@@ -314,18 +325,22 @@ export default function ChatPage() {
                     }}>
                         {messages.map((msg, i) => {
                             const isMine = msg.senderId === (user.id || user._id);
+                            const timeStr = msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+                            
                             return (
-                                <Box key={i} sx={{ display: 'flex', justifyContent: isMine ? 'flex-end' : 'flex-start', position: 'relative', '&:hover .delete-msg-btn': { opacity: 1 } }}>
+                                <Box key={msg.id || msg._id || i} sx={{ display: 'flex', justifyContent: isMine ? 'flex-end' : 'flex-start', position: 'relative', '&:hover .delete-msg-btn': { opacity: 1 } }}>
                                     <Paper sx={{ 
                                         p: 1.5, maxWidth: '75%', borderRadius: isMine ? '20px 20px 5px 20px' : '20px 20px 20px 5px',
                                         bgcolor: isMine ? 'primary.main' : 'rgba(255,255,255,0.08)', color: isMine ? '#000' : '#fff',
-                                        position: 'relative'
+                                        position: 'relative',
+                                        boxShadow: isMine ? '0 4px 15px rgba(0,229,255,0.2)' : 'none'
                                     }}>
-                                        {msg.messageType === 'image' && <img src={msg.mediaUrl} style={{ maxWidth: '100%', borderRadius: 8, mb: 1 }} />}
-                                        {msg.messageType === 'voice' && <audio src={msg.mediaUrl} controls style={{ maxWidth: '200px', filter: isMine ? 'invert(1)' : 'none' }} />}
-                                        <Typography variant="body2">{msg.text}</Typography>
-                                        <Typography variant="caption" sx={{ display: 'block', textAlign: 'right', opacity: 0.6, mt: 0.5 }}>
-                                            {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                        {msg.messageType === 'image' && msg.mediaUrl && <img src={msg.mediaUrl} style={{ maxWidth: '100%', borderRadius: 8, marginBottom: 8, display: 'block' }} />}
+                                        {msg.messageType === 'voice' && msg.mediaUrl && <audio src={msg.mediaUrl} controls style={{ maxWidth: '210px', height: '32px', filter: isMine ? 'invert(1)' : 'none' }} />}
+                                        
+                                        <Typography variant="body2" sx={{ wordBreak: 'break-word' }}>{msg.text || msg.encryptedMessage}</Typography>
+                                        <Typography variant="caption" sx={{ display: 'block', textAlign: 'right', opacity: 0.6, mt: 0.5, fontSize: '0.65rem' }}>
+                                            {timeStr}
                                         </Typography>
                                         
                                         <IconButton 

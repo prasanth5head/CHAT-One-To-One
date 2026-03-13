@@ -150,8 +150,10 @@ export const ChatProvider = ({ children }) => {
                 return chat;
             }));
             setChats(chatsWithData);
+            return chatsWithData;
         } catch (e) {
             console.error("Failed to load chats:", e);
+            return [];
         }
     };
 
@@ -237,6 +239,9 @@ export const ChatProvider = ({ children }) => {
         try {
             await chatAPI.updateWallpaper(chatId, wallpaperUrl);
             setChats(prev => prev.map(c => (c.id === chatId || c._id === chatId) ? { ...c, wallpaperUrl } : c));
+            if ((activeChat?.id || activeChat?._id) === chatId) {
+                setActiveChat(prev => ({ ...prev, wallpaperUrl }));
+            }
         } catch (e) {
             console.error("Failed to update wallpaper:", e);
         }
@@ -245,9 +250,11 @@ export const ChatProvider = ({ children }) => {
     const createChat = async (targetUser) => {
         try {
             const res = await chatAPI.createOrGetChat(targetUser.id);
-            await loadChats();
-            setActiveChat(res.data);
-            return res.data;
+            const updatedChats = await loadChats();
+            const chatId = res.data.id || res.data._id;
+            const fullChat = updatedChats?.find(c => (c.id || c._id) === chatId);
+            setActiveChat(fullChat || res.data);
+            return fullChat || res.data;
         } catch (e) {
             console.error(e);
         }
