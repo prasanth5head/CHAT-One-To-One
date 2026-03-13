@@ -29,12 +29,13 @@ export const encryptMessage = (message, aesKeyPem) => {
   const tag = cipher.mode.tag.getBytes();
   
   // Return format: iv:tag:encrypted (base64 encoded)
-  return btoa(iv + tag + encrypted);
+  // Use forge.util.encode64 instead of btoa (which fails on binary)
+  return forge.util.encode64(iv + tag + encrypted);
 };
 
 // AES-256-GCM decryption
 export const decryptMessage = (encryptedMessageBase64, aesKeyPem) => {
-  const decoded = atob(encryptedMessageBase64);
+  const decoded = forge.util.decode64(encryptedMessageBase64);
   const iv = decoded.substring(0, 12);
   const tag = decoded.substring(12, 28);
   const encrypted = decoded.substring(28);
@@ -50,9 +51,9 @@ export const decryptMessage = (encryptedMessageBase64, aesKeyPem) => {
 };
 
 // RSA encryption (used for encrypting the AES key before sending)
-export const encryptAESKeyWithRSA = (aesKeyPem, publicKeyPem) => {
+export const encryptAESKeyWithRSA = (aesKeyBytes, publicKeyPem) => {
   const publicKey = forge.pki.publicKeyFromPem(publicKeyPem);
-  const encryptedKeyBytes = publicKey.encrypt(aesKeyPem, 'RSA-OAEP');
+  const encryptedKeyBytes = publicKey.encrypt(aesKeyBytes, 'RSA-OAEP');
   return forge.util.encode64(encryptedKeyBytes);
 };
 

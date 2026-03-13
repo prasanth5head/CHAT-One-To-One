@@ -51,20 +51,22 @@ export const ChatProvider = ({ children }) => {
                 return;
             }
 
-            socketService.subscribe(`/topic/chat/${activeChat.id}`, (incomingMessage) => {
+            const chatId = activeChat.id || activeChat._id;
+            socketService.subscribe(`/topic/chat/${chatId}`, (incomingMessage) => {
                 const decrypted = tryDecrypt(incomingMessage);
                 setMessages((prev) => {
                     // Avoid duplicates (message may arrive via WS after we already loaded via REST)
-                    if (prev.find(m => m.id === incomingMessage.id)) return prev;
+                    const msgId = incomingMessage.id || incomingMessage._id;
+                    if (prev.find(m => (m.id || m._id) === msgId)) return prev;
                     return [...prev, decrypted];
                 });
             });
 
-            socketService.subscribe(`/topic/chat/${activeChat.id}/typing`, (payload) => {
-                if (payload.userId !== user.id) {
-                    setTypingUsers((prev) => ({ ...prev, [activeChat.id]: payload.typing }));
+            socketService.subscribe(`/topic/chat/${chatId}/typing`, (payload) => {
+                if (payload.userId !== user.id && payload.userId !== user._id) {
+                    setTypingUsers((prev) => ({ ...prev, [chatId]: payload.typing }));
                     // Auto-clear typing indicator after 3 seconds
-                    setTimeout(() => setTypingUsers((prev) => ({ ...prev, [activeChat.id]: false })), 3000);
+                    setTimeout(() => setTypingUsers((prev) => ({ ...prev, [chatId]: false })), 3000);
                 }
             });
         };
@@ -91,12 +93,14 @@ export const ChatProvider = ({ children }) => {
 
     // ── Helper: get a user from cache or API ─────────────────────────────────────
     const fetchUser = async (userId) => {
+        if (!userId) return null;
         if (userCache.current[userId]) return userCache.current[userId];
         try {
             const res = await userAPI.getUserById(userId);
             userCache.current[userId] = res.data;
             return res.data;
-        } catch {
+        } catch (err) {
+            console.warn(`User ${userId} not found (404)`);
             return null;
         }
     };
@@ -104,9 +108,17 @@ export const ChatProvider = ({ children }) => {
     const loadChats = async () => {
         try {
             const res = await chatAPI.getUserChats();
-            setChats(res.data);
+            const chatsWithData = await Promise.all(res.data.map(async (chat) => {
+                if (!chat.isGroup) {
+                    const otherId = chat.participants.find(p => p !== (user.id || user._id));
+                    const otherUser = await fetchUser(otherId);
+                    return { ...chat, otherUser };
+                }
+                return chat;
+            }));
+            setChats(chatsWithData);
         } catch (e) {
-            console.error(e);
+            console.error("Failed to load chats:", e);
         }
     };
 
@@ -127,37 +139,43 @@ export const ChatProvider = ({ children }) => {
     // ── Send a message with full E2EE ────────────────────────────────────────────
     const sendMessage = async (text, mediaUrl = null, messageType = 'text') => {
         if (!activeChat) return;
+        const chatId = activeChat.id || activeChat._id;
+        const currentUserId = user.id || user._id;
 
-        // 1. Generate a fresh AES-256 key for this message
-        const aesKeyBytes = generateAESKey();
-        const aesKeyB64 = forge.util.encode64(aesKeyBytes);
+        try {
+            // 1. Generate a fresh AES-256 key for this message
+            const aesKeyBytes = generateAESKey();
+            const aesKeyB64 = forge.util.encode64(aesKeyBytes);
 
-        // 2. Encrypt the plaintext with AES-256-GCM
-        const encryptedMessage = encryptMessage(text || 'Media File', aesKeyB64);
+            // 2. Encrypt the plaintext with AES-256-GCM
+            const encryptedMessage = encryptMessage(text || 'Media File', aesKeyB64);
 
-        // 3. For each participant, RSA-encrypt the AES key with their public key
-        const encryptedKeys = {};
-        for (const participantId of activeChat.participants) {
-            const participantUser = await fetchUser(participantId);
-            if (participantUser?.publicKey) {
-                try {
-                    encryptedKeys[participantId] = encryptAESKeyWithRSA(aesKeyBytes, participantUser.publicKey);
-                } catch (e) {
-                    console.warn(`Could not encrypt key for user ${participantId}`, e.message);
+            // 3. For each participant, RSA-encrypt the AES key with their public key
+            const encryptedKeys = {};
+            for (const participantId of activeChat.participants) {
+                const participantUser = await fetchUser(participantId);
+                if (participantUser?.publicKey) {
+                    try {
+                        encryptedKeys[participantId] = encryptAESKeyWithRSA(aesKeyBytes, participantUser.publicKey);
+                    } catch (e) {
+                        console.warn(`Could not encrypt key for user ${participantId}`, e.message);
+                    }
                 }
             }
-        }
 
-        // 4. Send the fully encrypted payload over WebSocket — server never sees plaintext
-        socketService.sendMessage('/app/chat.sendMessage', {
-            chatId: activeChat.id,
-            senderId: user.id,
-            encryptedMessage,
-            encryptedKeys,
-            mediaUrl,
-            messageType,
-            status: 'sent',
-        });
+            // 4. Send the fully encrypted payload over WebSocket — server never sees plaintext
+            socketService.sendMessage('/app/chat.sendMessage', {
+                chatId: chatId,
+                senderId: currentUserId,
+                encryptedMessage,
+                encryptedKeys,
+                mediaUrl,
+                messageType,
+                status: 'sent',
+            });
+        } catch (err) {
+            console.error("Encryption or Send failed:", err);
+        }
     };
 
     const sendTyping = (isTyping) => {

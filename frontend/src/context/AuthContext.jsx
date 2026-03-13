@@ -21,12 +21,15 @@ export const AuthProvider = ({ children }) => {
     }, []);
 
     const login = (userData, token, privateKey) => {
+        // Normalize user ID (MongoDB _id to id)
+        const normalizedUser = { ...userData, id: userData.id || userData._id };
+        
         localStorage.setItem('token', token);
-        localStorage.setItem('user', JSON.stringify(userData));
+        localStorage.setItem('user', JSON.stringify(normalizedUser));
         localStorage.setItem('privateKey', privateKey); // Store locally for E2EE
 
         api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-        setUser(userData);
+        setUser(normalizedUser);
     };
 
     const logout = () => {

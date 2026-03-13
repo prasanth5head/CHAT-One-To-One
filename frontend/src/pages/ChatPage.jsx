@@ -104,7 +104,7 @@ export default function ChatPage() {
                         <Paper elevation={16} sx={{ position: 'absolute', top: 70, left: 16, right: 16, zIndex: 10, bgcolor: 'background.paper', border: '1px solid #00e5ff', boxShadow: '0 0 15px rgba(0,229,255,0.3)' }}>
                             <List sx={{ p: 0 }}>
                                 {searchResults.map(u => (
-                                    <ListItem key={u.id} button onClick={() => handleCreateChat(u)} sx={{ '&:hover': { bgcolor: 'rgba(0,229,255,0.1)' } }}>
+                                    <ListItem key={u.id || u._id} button onClick={() => handleCreateChat(u)} sx={{ '&:hover': { bgcolor: 'rgba(0,229,255,0.1)' } }}>
                                         <ListItemAvatar>
                                             <Avatar src={u.avatar || `https://ui-avatars.com/api/?name=${u.name}`} sx={{ width: 32, height: 32, border: 'none', boxShadow: 'none' }} />
                                         </ListItemAvatar>
@@ -119,10 +119,13 @@ export default function ChatPage() {
                 {/* Chat List */}
                 <List sx={{ flex: 1, overflowY: 'auto', p: 1 }}>
                     {chats.map(chat => {
-                        const isSelected = activeChat?.id === chat.id;
+                        const chatId = chat.id || chat._id;
+                        const isSelected = (activeChat?.id || activeChat?._id) === chatId;
+                        const chatName = chat.isGroup ? chat.groupName : (chat.otherUser?.name || "Direct Chat");
+                        
                         return (
                             <ListItem
-                                key={chat.id}
+                                key={chatId}
                                 button
                                 onClick={() => selectChat(chat)}
                                 sx={{
@@ -135,15 +138,17 @@ export default function ChatPage() {
                                 }}
                             >
                                 <ListItemAvatar>
-                                    <Avatar sx={{ bgcolor: isSelected ? 'primary.main' : 'background.default', color: isSelected ? '#000' : 'primary.main', border: '1px solid #00e5ff', boxShadow: isSelected ? '0 0 10px rgba(0,229,255,0.8)' : 'none' }}>
-                                        {chat.isGroup ? <GroupIcon /> : <PersonIcon />}
-                                    </Avatar>
+                                    <Badge overlap="circular" anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }} variant="dot" color="success" invisible={!typingUsers[chatId]}>
+                                        <Avatar sx={{ bgcolor: isSelected ? 'primary.main' : 'background.default', color: isSelected ? '#000' : 'primary.main', border: '1px solid #00e5ff', boxShadow: isSelected ? '0 0 10px rgba(0,229,255,0.8)' : 'none' }}>
+                                            {chat.isGroup ? <GroupIcon /> : <PersonIcon />}
+                                        </Avatar>
+                                    </Badge>
                                 </ListItemAvatar>
                                 <ListItemText
-                                    primary={chat.isGroup ? chat.groupName : "Direct Chat"}
-                                    secondary={chat.lastMessage || "No messages yet"}
+                                    primary={chatName}
+                                    secondary={typingUsers[chatId] ? "typing..." : (chat.lastMessage || "No messages yet")}
                                     primaryTypographyProps={{ variant: 'subtitle2', noWrap: true, color: isSelected ? '#fff' : 'text.primary' }}
-                                    secondaryTypographyProps={{ variant: 'caption', noWrap: true, color: 'text.secondary' }}
+                                    secondaryTypographyProps={{ variant: 'caption', noWrap: true, color: typingUsers[chatId] ? '#00e5ff' : 'text.secondary' }}
                                 />
                             </ListItem>
                         );
@@ -162,11 +167,13 @@ export default function ChatPage() {
                                 {activeChat.isGroup ? <GroupIcon /> : <PersonIcon />}
                             </Avatar>
                             <Box>
-                                <Typography variant="subtitle1" fontWeight="bold">{activeChat.isGroup ? activeChat.groupName : "Direct Chat"}</Typography>
+                                <Typography variant="subtitle1" fontWeight="bold">
+                                    {activeChat.isGroup ? activeChat.groupName : (activeChat.otherUser?.name || "Direct Chat")}
+                                </Typography>
                                 <Typography variant="caption" color="text.secondary">
-                                    {typingUsers[activeChat.id] ? (
+                                    {typingUsers[activeChat.id || activeChat._id] ? (
                                         <span style={{ color: '#00e5ff', textShadow: '0 0 5px rgba(0,229,255,0.8)' }}>typing...</span>
-                                    ) : "Click here for contact info"}
+                                    ) : "Encrypted Connection"}
                                 </Typography>
                             </Box>
                         </Box>
