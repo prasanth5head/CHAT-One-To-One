@@ -76,18 +76,26 @@ export const ChatProvider = ({ children }) => {
 
     // ── Helper: decrypt a message using local private key ────────────────────────
     const tryDecrypt = (msg) => {
+        if (!msg || !user) return msg;
+        
         try {
             const privateKeyPem = localStorage.getItem('privateKey');
-            const myEncryptedKey = msg.encryptedKeys?.[user.id];
+            const myId = user.id || user._id;
+            
+            // Check for key using myId, and also broad check of the keys object
+            const myEncryptedKey = msg.encryptedKeys?.[myId];
+            
             if (myEncryptedKey && privateKeyPem) {
                 const aesKeyBytes = decryptAESKeyWithRSA(myEncryptedKey, privateKeyPem);
                 const text = decryptMessage(msg.encryptedMessage, aesKeyBytes);
                 return { ...msg, text };
+            } else if (!myEncryptedKey) {
+                console.warn(`No encrypted key found for user ${myId} in message`, msg.encryptedKeys);
             }
         } catch (e) {
-            console.warn('Decryption failed for message:', msg.id, e.message);
+            console.warn('Decryption failed for message:', msg.id || msg._id, e.message);
         }
-        return msg; // Return raw (still renders as ciphertext if decryption fails)
+        return msg; // Return raw (renders as ciphertext if decryption fails)
     };
 
     // ── Helper: get a user from cache or API ─────────────────────────────────────
