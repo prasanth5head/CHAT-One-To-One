@@ -8,6 +8,7 @@ import ChatPage from './pages/ChatPage';
 import { ThemeProvider, CssBaseline, Box, CircularProgress } from '@mui/material';
 import glowingTheme from './theme';
 import { GoogleOAuthProvider } from '@react-oauth/google';
+import InstallPWA from './components/InstallPWA';
 
 // These components MUST be rendered as children of AuthProvider
 // so they can call useAuth() correctly.
@@ -57,6 +58,7 @@ function App() {
         <AuthProvider>
           <ChatProvider>
             <AppRoutes />
+            <InstallPWA />
           </ChatProvider>
         </AuthProvider>
       </ThemeProvider>
