@@ -1,4 +1,5 @@
 import { Box } from '@mui/material';
+import introVideo from '../assets/Intro.mp4';
 
 export default function BackgroundVideo() {
     return (
@@ -34,7 +35,7 @@ export default function BackgroundVideo() {
                     objectFit: 'cover',
                 }}
             >
-                <source src="https://assets.mixkit.co/videos/preview/mixkit-abstract-technology-connection-lines-network-background-32698-large.mp4" type="video/mp4" />
+                <source src={introVideo} type="video/mp4" />
                 Your browser does not support the video tag.
             </video>
         </Box>
