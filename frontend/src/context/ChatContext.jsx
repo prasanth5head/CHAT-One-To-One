@@ -94,10 +94,11 @@ export const ChatProvider = ({ children }) => {
                 console.log(`Successfully decrypted msg ${msg.id || msg._id}`);
                 return { ...msg, text };
             } else {
-                console.warn(`Decryption skipped: Key found? ${!!myEncryptedKey}, PrivateKey found? ${!!privateKeyPem}`);
+                // If it's an old message and we don't have the key, label it
                 if (!myEncryptedKey) {
-                    console.warn(`My ID ${myId} not found in keys:`, Object.keys(msg.encryptedKeys || {}));
+                    return { ...msg, text: "[Message encrypted with a previous security key]", isStale: true };
                 }
+                console.warn(`Decryption skipped: PrivateKey found? ${!!privateKeyPem}`);
             }
         } catch (e) {
             console.warn('Decryption error for message:', msg.id || msg._id, e.message);
@@ -106,9 +107,9 @@ export const ChatProvider = ({ children }) => {
     };
 
     // ── Helper: get a user from cache or API ─────────────────────────────────────
-    const fetchUser = async (userId) => {
+    const fetchUser = async (userId, forceRefresh = false) => {
         if (!userId) return null;
-        if (userCache.current[userId]) return userCache.current[userId];
+        if (!forceRefresh && userCache.current[userId]) return userCache.current[userId];
         try {
             const res = await userAPI.getUserById(userId);
             userCache.current[userId] = res.data;
@@ -166,7 +167,8 @@ export const ChatProvider = ({ children }) => {
             // 3. For each participant, RSA-encrypt the AES key with their public key
             const encryptedKeys = {};
             for (const participantId of activeChat.participants) {
-                const participantUser = await fetchUser(participantId);
+                // Force refresh user data to ensure we have the absolute LATEST public key from server
+                const participantUser = await fetchUser(participantId, true);
                 if (participantUser?.publicKey) {
                     try {
                         encryptedKeys[participantId] = encryptAESKeyWithRSA(aesKeyBytes, participantUser.publicKey);

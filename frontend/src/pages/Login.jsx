@@ -40,38 +40,33 @@ export default function Login() {
             const accessToken = tokenResponse.access_token;
             if (!accessToken) throw new Error('No access token received from Google.');
             
-            // 1. Get current stored key if it exists
-            const existingPrivateKey = localStorage.getItem('privateKey');
-            const existingUserRaw = localStorage.getItem('user');
-            const existingUser = existingUserRaw ? JSON.parse(existingUserRaw) : null;
-            
+            // 1. Get or Generate Keys
+            let existingPrivateKey = localStorage.getItem('privateKey');
             let keys = null;
-            let shouldUpdatePublicKey = false;
 
-            // 2. Only generate new keys if we don't have them
-            if (!existingPrivateKey) {
-                keys = await generateKeyPair();
-                shouldUpdatePublicKey = true;
-            } else {
-                // We have a private key, we need the public key to send to server
-                // Extract public key from private key to ensure they match
+            if (existingPrivateKey) {
                 try {
+                    // Extract public key to ensure we always sync with server
                     const forgePriv = forge.pki.privateKeyFromPem(existingPrivateKey);
                     const forgePub = forge.pki.setRsaPublicKey(forgePriv.n, forgePriv.e);
                     keys = {
                         privateKey: existingPrivateKey,
                         publicKey: forge.pki.publicKeyToPem(forgePub)
                     };
+                    console.log("Reusing existing security keys...");
                 } catch (e) {
-                    console.warn("Corrupt local key, regenerating...");
+                    console.warn("Local keys corrupted, generating new ones...");
                     keys = await generateKeyPair();
-                    shouldUpdatePublicKey = true;
                 }
+            } else {
+                console.log("Generating fresh security keys...");
+                keys = await generateKeyPair();
             }
 
+            // 2. ALWAYS send public key to server to stay in sync
             const res = await authAPI.loginWithGoogle({
                 token: accessToken,
-                publicKey: shouldUpdatePublicKey ? keys.publicKey : undefined,
+                publicKey: keys.publicKey,
             });
 
             login(res.data.user, res.data.token, keys.privateKey);
