@@ -28,6 +28,12 @@ public class MessageController {
         return ResponseEntity.ok(messageService.getMessages(chatId));
     }
 
+    @DeleteMapping("/api/messages/{messageId}")
+    public ResponseEntity<Void> deleteMessage(@PathVariable String messageId) {
+        messageService.deleteMessage(messageId);
+        return ResponseEntity.ok().build();
+    }
+
     // WebSocket endpoint to receive messages
     @MessageMapping("/chat.sendMessage")
     public void processMessage(@Payload Message message) {

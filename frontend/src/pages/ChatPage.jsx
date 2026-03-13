@@ -21,7 +21,8 @@ import {
     EmojiEmotions as EmojiIcon,
     Lock as LockIcon,
     Close as CloseIcon,
-    PhotoCamera as PhotoCameraIcon
+    PhotoCamera as PhotoCameraIcon,
+    Delete as DeleteIcon
 } from '@mui/icons-material';
 
 export default function ChatPage() {
@@ -29,7 +30,7 @@ export default function ChatPage() {
     const { 
         chats, activeChat, messages, selectChat, sendMessage, 
         loadChats, sendActivity, activityStatus, createChat,
-        nicknames, setNickname, updateChatWallpaper 
+        nicknames, setNickname, updateChatWallpaper, deleteChat, deleteMessage
     } = useChat();
     const navigate = useNavigate();
 
@@ -236,14 +237,37 @@ export default function ChatPage() {
                         const someoneTyping = status ? Object.values(status).some(s => s.typing) : false;
 
                         return (
-                            <ListItem key={chatId} button onClick={() => selectChat(chat)} sx={{ borderRadius: 2, mb: 0.5, bgcolor: isSelected ? 'rgba(0,229,255,0.15)' : 'transparent', border: isSelected ? '1px solid rgba(0,229,255,0.3)' : '1px solid transparent' }}>
+                            <ListItem key={chatId} button onClick={() => selectChat(chat)} 
+                                sx={{ 
+                                    borderRadius: 2, mb: 0.5, 
+                                    bgcolor: isSelected ? 'rgba(0,229,255,0.15)' : 'transparent', 
+                                    border: isSelected ? '1px solid rgba(0,229,255,0.3)' : '1px solid transparent',
+                                    position: 'relative',
+                                    '&:hover .delete-chat-btn': { opacity: 1 }
+                                }}
+                            >
                                 <ListItemAvatar>
                                     <Badge overlap="circular" anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }} variant="dot" color="success" invisible={!someoneTyping && !someoneRecording}>
                                         <Avatar sx={{ border: '1px solid #00e5ff' }}>{chat.isGroup ? <GroupIcon /> : <PersonIcon />}</Avatar>
                                     </Badge>
                                 </ListItemAvatar>
                                 <ListItemText primary={chatName} secondary={someoneRecording ? "recording..." : (someoneTyping ? "typing..." : (chat.lastMessage || "No messages"))}
-                                    secondaryTypographyProps={{ color: (someoneTyping || someoneRecording) ? 'primary.main' : 'text.secondary' }} />
+                                    secondaryTypographyProps={{ color: (someoneTyping || someoneRecording) ? 'primary.main' : 'text.secondary', noWrap: true, sx: { maxWidth: '140px' } }} />
+                                
+                                <IconButton 
+                                    className="delete-chat-btn"
+                                    size="small" 
+                                    sx={{ 
+                                        opacity: 0, position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
+                                        color: 'rgba(255,255,255,0.3)', '&:hover': { color: 'error.main' }, transition: 'opacity 0.2s'
+                                    }}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (window.confirm("Delete this chat and all messages?")) deleteChat(chatId);
+                                    }}
+                                >
+                                    <DeleteIcon fontSize="inherit" />
+                                </IconButton>
                             </ListItem>
                         );
                     })}
@@ -291,10 +315,11 @@ export default function ChatPage() {
                         {messages.map((msg, i) => {
                             const isMine = msg.senderId === (user.id || user._id);
                             return (
-                                <Box key={i} sx={{ display: 'flex', justifyContent: isMine ? 'flex-end' : 'flex-start' }}>
+                                <Box key={i} sx={{ display: 'flex', justifyContent: isMine ? 'flex-end' : 'flex-start', position: 'relative', '&:hover .delete-msg-btn': { opacity: 1 } }}>
                                     <Paper sx={{ 
                                         p: 1.5, maxWidth: '75%', borderRadius: isMine ? '20px 20px 5px 20px' : '20px 20px 20px 5px',
-                                        bgcolor: isMine ? 'primary.main' : 'rgba(255,255,255,0.08)', color: isMine ? '#000' : '#fff'
+                                        bgcolor: isMine ? 'primary.main' : 'rgba(255,255,255,0.08)', color: isMine ? '#000' : '#fff',
+                                        position: 'relative'
                                     }}>
                                         {msg.messageType === 'image' && <img src={msg.mediaUrl} style={{ maxWidth: '100%', borderRadius: 8, mb: 1 }} />}
                                         {msg.messageType === 'voice' && <audio src={msg.mediaUrl} controls style={{ maxWidth: '200px', filter: isMine ? 'invert(1)' : 'none' }} />}
@@ -302,6 +327,22 @@ export default function ChatPage() {
                                         <Typography variant="caption" sx={{ display: 'block', textAlign: 'right', opacity: 0.6, mt: 0.5 }}>
                                             {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                         </Typography>
+                                        
+                                        <IconButton 
+                                            className="delete-msg-btn"
+                                            size="small" 
+                                            sx={{ 
+                                                opacity: 0, position: 'absolute', 
+                                                top: -10, [isMine ? 'left' : 'right']: -30,
+                                                color: 'rgba(255,255,255,0.3)', '&:hover': { color: 'error.main' },
+                                                transition: 'opacity 0.2s'
+                                            }}
+                                            onClick={() => {
+                                                if (window.confirm("Delete this message?")) deleteMessage(msg.id || msg._id);
+                                            }}
+                                        >
+                                            <DeleteIcon fontSize="inherit" />
+                                        </IconButton>
                                     </Paper>
                                 </Box>
                             );

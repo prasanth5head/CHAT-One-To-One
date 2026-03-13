@@ -253,11 +253,33 @@ export const ChatProvider = ({ children }) => {
         }
     };
 
+    const deleteChat = async (chatId) => {
+        try {
+            await chatAPI.deleteChat(chatId);
+            setChats(prev => prev.filter(c => (c.id || c._id) !== chatId));
+            if ((activeChat?.id || activeChat?._id) === chatId) {
+                setActiveChat(null);
+                setMessages([]);
+            }
+        } catch (e) {
+            console.error("Failed to delete chat:", e);
+        }
+    };
+
+    const deleteMessage = async (messageId) => {
+        try {
+            await messageAPI.deleteMessage(messageId);
+            setMessages(prev => prev.filter(m => (m.id || m._id) !== messageId));
+        } catch (e) {
+            console.error("Failed to delete message:", e);
+        }
+    };
+
     return (
         <ChatContext.Provider value={{
             chats, activeChat, messages, selectChat,
             sendMessage, loadChats, sendActivity, activityStatus, createChat,
-            nicknames, setNickname, updateChatWallpaper
+            nicknames, setNickname, updateChatWallpaper, deleteChat, deleteMessage
         }}>
             {children}
         </ChatContext.Provider>

@@ -32,6 +32,12 @@ public class ChatController {
     public ResponseEntity<Chat> updateWallpaper(@PathVariable String chatId, @RequestBody WallpaperRequest request) {
         return ResponseEntity.ok(chatService.updateWallpaper(chatId, request.getWallpaperUrl()));
     }
+
+    @DeleteMapping("/{chatId}")
+    public ResponseEntity<Void> deleteChat(@PathVariable String chatId) {
+        chatService.deleteChat(chatId);
+        return ResponseEntity.ok().build();
+    }
 }
 
 class WallpaperRequest {

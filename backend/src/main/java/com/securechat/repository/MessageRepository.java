@@ -8,4 +8,5 @@ import java.util.List;
 @Repository
 public interface MessageRepository extends MongoRepository<Message, String> {
     List<Message> findByChatIdOrderByTimestampAsc(String chatId);
+    void deleteByChatId(String chatId);
 }

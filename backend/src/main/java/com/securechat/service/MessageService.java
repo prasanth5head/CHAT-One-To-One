@@ -36,4 +36,23 @@ public class MessageService {
     public List<Message> getMessages(String chatId) {
         return messageRepository.findByChatIdOrderByTimestampAsc(chatId);
     }
+
+    public void deleteMessage(String messageId) {
+        messageRepository.findById(messageId).ifPresent(msg -> {
+            String chatId = msg.getChatId();
+            messageRepository.deleteById(messageId);
+            
+            // After deletion, find the new "last message"
+            List<Message> remaining = messageRepository.findByChatIdOrderByTimestampAsc(chatId);
+            chatRepository.findById(chatId).ifPresent(chat -> {
+                if (remaining.isEmpty()) {
+                    chat.setLastMessage(null);
+                } else {
+                    chat.setLastMessage(remaining.get(remaining.size() - 1).getEncryptedMessage());
+                }
+                chat.setUpdatedAt(new Date());
+                chatRepository.save(chat);
+            });
+        });
+    }
 }

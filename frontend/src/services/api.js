@@ -32,10 +32,12 @@ export const chatAPI = {
     getUserChats: () => api.get('/chats'),
     createOrGetChat: (userId) => api.post(`/chats/${userId}`),
     updateWallpaper: (chatId, wallpaperUrl) => api.put(`/chats/${chatId}/wallpaper`, { wallpaperUrl }),
+    deleteChat: (chatId) => api.delete(`/chats/${chatId}`),
 };
 
 export const messageAPI = {
     getMessages: (chatId) => api.get(`/messages/${chatId}`),
+    deleteMessage: (messageId) => api.delete(`/messages/${messageId}`),
 };
 
 export const mediaAPI = {
