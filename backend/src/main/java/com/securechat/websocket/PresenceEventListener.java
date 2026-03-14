@@ -1,6 +1,5 @@
 package com.securechat.websocket;
 
-import com.securechat.model.User;
 import com.securechat.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.event.EventListener;
@@ -26,7 +25,7 @@ public class PresenceEventListener {
         SimpMessageHeaderAccessor headers = SimpMessageHeaderAccessor.wrap(event.getMessage());
         String userId = null;
         if (headers.getUser() != null) {
-            userId = headers.getUser().getName(); // This depends on your security config
+            userId = headers.getUser().getName();
         }
         
         if (userId != null) {

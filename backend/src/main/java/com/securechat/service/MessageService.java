@@ -40,12 +40,10 @@ public class MessageService {
 
     public void markAsRead(String chatId, String userId) {
         List<Message> messages = messageRepository.findByChatIdOrderByTimestampAsc(chatId);
-        boolean changed = false;
         for (Message msg : messages) {
             if (!msg.getSenderId().equals(userId) && !"read".equals(msg.getStatus())) {
                 msg.setStatus("read");
                 messageRepository.save(msg);
-                changed = true;
             }
         }
     }

@@ -103,15 +103,20 @@ export const ChatProvider = ({ children }) => {
         if (!msg || !user) return msg;
         try {
             const privateKeyPem = localStorage.getItem('privateKey');
+            if (!privateKeyPem) return msg;
+
             const myId = user.id || user._id;
-            const myEncryptedKey = msg.encryptedKeys?.[myId];
+            // Check for key in either 'id' or '_id' format in the encryptedKeys map
+            const myEncryptedKey = msg.encryptedKeys?.[myId] || msg.encryptedKeys?.[user._id] || msg.encryptedKeys?.[user.id];
             
-            if (myEncryptedKey && privateKeyPem) {
+            if (myEncryptedKey) {
                 const aesKeyBytes = decryptAESKeyWithRSA(myEncryptedKey, privateKeyPem);
                 const text = decryptMessage(msg.encryptedMessage, aesKeyBytes);
                 return { ...msg, text };
             }
-        } catch (e) { }
+        } catch (e) {
+            console.error("Neural Decryption Error:", e);
+        }
         return msg;
     };
 
@@ -167,19 +172,33 @@ export const ChatProvider = ({ children }) => {
             const aesKeyBytes = generateAESKey();
             const encryptedMessage = encryptMessage(text || 'Neural Packet', aesKeyBytes);
             const encryptedKeys = {};
+            
+            // Ensure we include our own public key for self-decryption
+            const myId = user.id || user._id;
+            if (user.publicKey) {
+                encryptedKeys[myId] = encryptAESKeyWithRSA(aesKeyBytes, user.publicKey);
+            }
+
             for (const pId of activeChat.participants) {
+                if (pId === myId) continue; // Already added self
                 const pUser = await fetchUser(pId, true);
                 if (pUser?.publicKey) {
                     encryptedKeys[pId] = encryptAESKeyWithRSA(aesKeyBytes, pUser.publicKey);
                 }
             }
+            
             socketService.sendMessage('/app/chat.sendMessage', {
-                chatId, senderId: (user.id || user._id),
+                chatId, senderId: myId,
                 encryptedMessage, encryptedKeys, mediaUrl, messageType, status: 'sent'
             });
-            // Update last updated at so chat moves to top
-            setChats(prev => prev.map(c => (c.id === chatId || c._id === chatId) ? { ...c, updatedAt: new Date() } : c).sort((a,b) => new Date(b.updatedAt) - new Date(a.updatedAt)));
-        } catch (err) { }
+
+            // Optimistically update last updated for UI responsiveness
+            setChats(prev => prev.map(c => 
+                ((c.id || c._id) === chatId) ? { ...c, updatedAt: new Date(), lastMessage: text || "Neural Link Updated" } : c
+            ).sort((a,b) => new Date(b.updatedAt) - new Date(a.updatedAt)));
+        } catch (err) {
+            console.error("Neural Transmission Failure:", err);
+        }
     };
 
     const sendReaction = (messageId, emoji) => {
