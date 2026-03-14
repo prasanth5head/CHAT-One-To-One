@@ -15,6 +15,17 @@ api.interceptors.request.use((config) => {
     return config;
 });
 
+// Response interceptor for debugging and security errors
+api.interceptors.response.use(
+    (response) => response,
+    (error) => {
+        if (error.response?.status === 403) {
+            console.error("Neural Security Rejection (403): Your account session may be invalid or you are calling the wrong backend domain.");
+        }
+        return Promise.reject(error);
+    }
+);
+
 export const authAPI = {
     loginWithGoogle: (data) => api.post('/auth/google', data),
 };
@@ -50,8 +61,7 @@ export const mediaAPI = {
     uploadMedia: (file, type = 'auto') => {
         const formData = new FormData();
         formData.append('file', file);
-        return api.post(`/media/upload?type=${type}`, formData, {
-            headers: { 'Content-Type': 'multipart/form-data' },
-        });
+        // Let axios set the Content-Type automatically with the correct boundary
+        return api.post(`/media/upload?type=${type}`, formData);
     },
 };

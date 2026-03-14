@@ -27,10 +27,10 @@ public class JwtFilter extends OncePerRequestFilter {
             String jwt = parseJwt(request);
             if (jwt != null && jwtProvider.validateToken(jwt)) {
                 String userId = jwtProvider.getUserIdFromToken(jwt);
-                // For a simpler setup, we create an authentication token using userId as
-                // principal
+                
+                // Provide a default authority so Spring Security doesn't treat the user as having zero permissions
                 UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
-                        userId, null, null);
+                        userId, null, java.util.Collections.singletonList(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_USER")));
                 authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
 
                 SecurityContextHolder.getContext().setAuthentication(authentication);

@@ -73,6 +73,10 @@ export const ChatProvider = ({ children }) => {
                     if (prev.find(m => (m.id || m._id) === (msg.id || msg._id))) return prev;
                     return [...prev, decrypted];
                 });
+                // Update the chat preview in the sidebar
+                setChats(prev => prev.map(c => 
+                    ((c.id || c._id) === chatId) ? { ...c, lastMessage: decrypted.text || decrypted.encryptedMessage, updatedAt: new Date() } : c
+                ).sort((a,b) => new Date(b.updatedAt) - new Date(a.updatedAt)));
             });
 
             socketService.subscribe(`/topic/chat/${chatId}/activity`, (payload) => {
@@ -113,6 +117,8 @@ export const ChatProvider = ({ children }) => {
                 const aesKeyBytes = decryptAESKeyWithRSA(myEncryptedKey, privateKeyPem);
                 const text = decryptMessage(msg.encryptedMessage, aesKeyBytes);
                 return { ...msg, text };
+            } else {
+                console.warn("Neural Decyption: Missing key for your ID in this packet.");
             }
         } catch (e) {
             console.error("Neural Decryption Error:", e);
@@ -137,6 +143,12 @@ export const ChatProvider = ({ children }) => {
         try {
             const res = await chatAPI.getUserChats();
             const chatsWithData = await Promise.all(res.data.map(async (chat) => {
+                // If the last message is encrypted, try to decrypt it for the preview
+                if (chat.lastMessage && chat.lastMessage.length > 50) {
+                   // This is harder because we don't have the encryptedKeys for the last message in the chat list response
+                   // For now, it will show ciphertext until a new message arrives or chat is opened
+                }
+
                 if (!chat.isGroup) {
                     const otherId = chat.participants.find(p => p !== (user.id || user._id));
                     const otherUser = await fetchUser(otherId);
@@ -173,14 +185,20 @@ export const ChatProvider = ({ children }) => {
             const encryptedMessage = encryptMessage(text || 'Neural Packet', aesKeyBytes);
             const encryptedKeys = {};
             
-            // Ensure we include our own public key for self-decryption
             const myId = user.id || user._id;
-            if (user.publicKey) {
-                encryptedKeys[myId] = encryptAESKeyWithRSA(aesKeyBytes, user.publicKey);
+            // Recover public key if it's missing from user state (important for old sessions)
+            let myPublicKey = user.publicKey;
+            if (!myPublicKey) {
+                const refreshed = await fetchUser(myId, true);
+                myPublicKey = refreshed?.publicKey;
+            }
+
+            if (myPublicKey) {
+                encryptedKeys[myId] = encryptAESKeyWithRSA(aesKeyBytes, myPublicKey);
             }
 
             for (const pId of activeChat.participants) {
-                if (pId === myId) continue; // Already added self
+                if (pId === myId) continue;
                 const pUser = await fetchUser(pId, true);
                 if (pUser?.publicKey) {
                     encryptedKeys[pId] = encryptAESKeyWithRSA(aesKeyBytes, pUser.publicKey);
