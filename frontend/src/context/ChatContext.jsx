@@ -70,9 +70,19 @@ export const ChatProvider = ({ children }) => {
             socketService.subscribe(`/topic/chat/${chatId}`, (msg) => {
                 const decrypted = tryDecrypt(msg);
                 setMessages((prev) => {
-                    if (prev.find(m => (m.id || m._id) === (msg.id || msg._id))) return prev;
+                    const index = prev.findIndex(m => (m.id || m._id) === (msg.id || msg._id));
+                    if (index !== -1) {
+                        const existing = prev[index];
+                        if (!existing.text && decrypted.text) {
+                            const next = [...prev];
+                            next[index] = decrypted;
+                            return next;
+                        }
+                        return prev;
+                    }
                     return [...prev, decrypted];
                 });
+                
                 // Update the chat preview in the sidebar
                 setChats(prev => prev.map(c => 
                     ((c.id || c._id) === chatId) ? { ...c, lastMessage: decrypted.text || decrypted.encryptedMessage, updatedAt: new Date() } : c
@@ -104,24 +114,32 @@ export const ChatProvider = ({ children }) => {
     }, [activeChat]);
 
     const tryDecrypt = (msg) => {
-        if (!msg || !user) return msg;
+        if (!msg || !msg.encryptedMessage || !user) return msg;
         try {
             const privateKeyPem = localStorage.getItem('privateKey');
             if (!privateKeyPem) return msg;
 
             const myId = user.id || user._id;
-            // Check for key in either 'id' or '_id' format in the encryptedKeys map
-            const myEncryptedKey = msg.encryptedKeys?.[myId] || msg.encryptedKeys?.[user._id] || msg.encryptedKeys?.[user.id];
+            const keys = msg.encryptedKeys || {};
             
+            // SUPER ROBUST KEY MATCHING
+            // 1. Try direct matches
+            let myEncryptedKey = keys[myId] || keys[user.id] || keys[user._id];
+            
+            // 2. If no direct match, look for ANY standard hex ID format key (if ID is 24 chars)
+            if (!myEncryptedKey && myId?.length === 24) {
+                 myEncryptedKey = keys[myId];
+            }
+
             if (myEncryptedKey) {
                 const aesKeyBytes = decryptAESKeyWithRSA(myEncryptedKey, privateKeyPem);
                 const text = decryptMessage(msg.encryptedMessage, aesKeyBytes);
                 return { ...msg, text };
             } else {
-                console.warn("Neural Decyption: Missing key for your ID in this packet.");
+                console.warn(`[Neural Decryption] Failed to find key for user ${myId}. Available keys in packet:`, Object.keys(keys));
             }
         } catch (e) {
-            console.error("Neural Decryption Error:", e);
+            console.error("[Neural Decryption] Error processing packet:", e);
         }
         return msg;
     };
@@ -143,12 +161,6 @@ export const ChatProvider = ({ children }) => {
         try {
             const res = await chatAPI.getUserChats();
             const chatsWithData = await Promise.all(res.data.map(async (chat) => {
-                // If the last message is encrypted, try to decrypt it for the preview
-                if (chat.lastMessage && chat.lastMessage.length > 50) {
-                   // This is harder because we don't have the encryptedKeys for the last message in the chat list response
-                   // For now, it will show ciphertext until a new message arrives or chat is opened
-                }
-
                 if (!chat.isGroup) {
                     const otherId = chat.participants.find(p => p !== (user.id || user._id));
                     const otherUser = await fetchUser(otherId);
@@ -180,13 +192,14 @@ export const ChatProvider = ({ children }) => {
     const sendMessage = async (text, mediaUrl = null, messageType = 'text') => {
         if (!activeChat) return;
         const chatId = activeChat.id || activeChat._id;
+        const myId = user.id || user._id;
+
         try {
             const aesKeyBytes = generateAESKey();
             const encryptedMessage = encryptMessage(text || 'Neural Packet', aesKeyBytes);
             const encryptedKeys = {};
             
-            const myId = user.id || user._id;
-            // Recover public key if it's missing from user state (important for old sessions)
+            // Recover public key
             let myPublicKey = user.publicKey;
             if (!myPublicKey) {
                 const refreshed = await fetchUser(myId, true);
@@ -202,20 +215,25 @@ export const ChatProvider = ({ children }) => {
                 const pUser = await fetchUser(pId, true);
                 if (pUser?.publicKey) {
                     encryptedKeys[pId] = encryptAESKeyWithRSA(aesKeyBytes, pUser.publicKey);
+                } else {
+                    console.warn(`[Neural Encryption] Missing public key for participant ${pId}. They will not be able to decrypt this link.`);
                 }
             }
             
-            socketService.sendMessage('/app/chat.sendMessage', {
+            const msgPayload = {
                 chatId, senderId: myId,
-                encryptedMessage, encryptedKeys, mediaUrl, messageType, status: 'sent'
-            });
+                encryptedMessage, encryptedKeys, mediaUrl, messageType, status: 'sent',
+                timestamp: new Date().toISOString()
+            };
 
-            // Optimistically update last updated for UI responsiveness
+            socketService.sendMessage('/app/chat.sendMessage', msgPayload);
+
             setChats(prev => prev.map(c => 
                 ((c.id || c._id) === chatId) ? { ...c, updatedAt: new Date(), lastMessage: text || "Neural Link Updated" } : c
             ).sort((a,b) => new Date(b.updatedAt) - new Date(a.updatedAt)));
+
         } catch (err) {
-            console.error("Neural Transmission Failure:", err);
+            console.error("[Neural Transmission] Interface failure:", err);
         }
     };
 

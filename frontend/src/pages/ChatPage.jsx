@@ -34,22 +34,11 @@ import {
     Pause as PauseIcon
 } from '@mui/icons-material';
 
-// ─── Visual Encryption Helper ──────────────────────────────────────────────
-function visualEncrypt(text) {
-    if (!text) return '';
-    try {
-        const encoded = btoa(unescape(encodeURIComponent(text)));
-        const noise = '§∆Ω∑†‡µπ∂∫≈≠≡≤≥';
-        let result = '';
-        for (let i = 0; i < encoded.length; i++) {
-            result += encoded[i];
-            if ((i + 1) % 4 === 0) result += noise[Math.floor(Math.random() * noise.length)];
-        }
-        return result.substring(0, 30) + '...';
-    } catch {
-        return '█▓░ [SECURE] ░▓█';
-    }
-}
+const visualEncrypt = (text) => {
+    if (!text) return "";
+    const symbols = "▰▱▲△▴▵▼▽▲△▴▾◁▷◆◇◈◉◊○◌⦿๏ʘ";
+    return text.split('').map(() => symbols[Math.floor(Math.random() * symbols.length)]).join('');
+};
 
 const ENCRYPT_AFTER_SECONDS = 30;
 
