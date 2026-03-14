@@ -16,10 +16,13 @@ public class User {
     private String id;
     private String name;
     private String email;
+    private String password; // For traditional login
     private String avatar;
+    private String bio;
+    private String status; // online, offline
     private String displayName; // Custom user display name
     private String chatWallpaperUrl; // Custom chat background URL
     private String publicKey; // Public key for E2EE
-    private Date lastSeen; // For online/offline status
+    private Date lastSeen; 
     private Date createdAt = new Date();
 }

@@ -21,10 +21,8 @@ public class MessageController {
     @Autowired
     private SimpMessagingTemplate messagingTemplate;
 
-    // REST endpoint to get history
     @GetMapping("/api/messages/{chatId}")
     public ResponseEntity<List<Message>> getChatMessages(@PathVariable String chatId, Authentication authentication) {
-        // Here we could add verification that the user belongs to chat
         return ResponseEntity.ok(messageService.getMessages(chatId));
     }
 
@@ -34,20 +32,27 @@ public class MessageController {
         return ResponseEntity.ok().build();
     }
 
-    // WebSocket endpoint to receive messages
     @MessageMapping("/chat.sendMessage")
     public void processMessage(@Payload Message message) {
         Message saved = messageService.saveMessage(message);
-        // Send to topic for this chat, clients sub to /topic/chat/{chatId}
         messagingTemplate.convertAndSend("/topic/chat/" + message.getChatId(), saved);
-
-        // Optionally send push notification logic depending on target users
     }
 
-    // Activity indicator (typing, recording)
     @MessageMapping("/chat.activity")
     public void processActivity(@Payload ActivityPayload activityPayload) {
         messagingTemplate.convertAndSend("/topic/chat/" + activityPayload.getChatId() + "/activity", activityPayload);
+    }
+
+    @MessageMapping("/chat.reaction")
+    public void processReaction(@Payload ReactionPayload reactionPayload) {
+        messageService.addReaction(reactionPayload.getMessageId(), reactionPayload.getReaction());
+        messagingTemplate.convertAndSend("/topic/chat/" + reactionPayload.getChatId() + "/reaction", reactionPayload);
+    }
+
+    @PostMapping("/api/messages/{chatId}/read")
+    public ResponseEntity<Void> markAsRead(@PathVariable String chatId, Authentication authentication) {
+        messageService.markAsRead(chatId, authentication.getName());
+        return ResponseEntity.ok().build();
     }
 }
 
@@ -57,36 +62,25 @@ class ActivityPayload {
     private boolean typing;
     private boolean recording;
 
-    // Getters and Setters
-    public String getChatId() {
-        return chatId;
-    }
+    public String getChatId() { return chatId; }
+    public void setChatId(String chatId) { this.chatId = chatId; }
+    public String getUserId() { return userId; }
+    public void setUserId(String userId) { this.userId = userId; }
+    public boolean isTyping() { return typing; }
+    public void setTyping(boolean typing) { this.typing = typing; }
+    public boolean isRecording() { return recording; }
+    public void setRecording(boolean recording) { this.recording = recording; }
+}
 
-    public void setChatId(String chatId) {
-        this.chatId = chatId;
-    }
+class ReactionPayload {
+    private String chatId;
+    private String messageId;
+    private com.securechat.model.Reaction reaction;
 
-    public String getUserId() {
-        return userId;
-    }
-
-    public void setUserId(String userId) {
-        this.userId = userId;
-    }
-
-    public boolean isTyping() {
-        return typing;
-    }
-
-    public void setTyping(boolean typing) {
-        this.typing = typing;
-    }
-
-    public boolean isRecording() {
-        return recording;
-    }
-
-    public void setRecording(boolean recording) {
-        this.recording = recording;
-    }
+    public String getChatId() { return chatId; }
+    public void setChatId(String chatId) { this.chatId = chatId; }
+    public String getMessageId() { return messageId; }
+    public void setMessageId(String messageId) { this.messageId = messageId; }
+    public com.securechat.model.Reaction getReaction() { return reaction; }
+    public void setReaction(com.securechat.model.Reaction reaction) { this.reaction = reaction; }
 }

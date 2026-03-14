@@ -35,9 +35,15 @@ export const chatAPI = {
     deleteChat: (chatId) => api.delete(`/chats/${chatId}`),
 };
 
+export const groupAPI = {
+    createGroup: (data) => api.post('/groups/create', data),
+    addMember: (groupId, userId) => api.post(`/groups/${groupId}/add/${userId}`),
+};
+
 export const messageAPI = {
     getMessages: (chatId) => api.get(`/messages/${chatId}`),
     deleteMessage: (messageId) => api.delete(`/messages/${messageId}`),
+    markAsRead: (chatId) => api.post(`/messages/${chatId}/read`),
 };
 
 export const mediaAPI = {

@@ -1,0 +1,22 @@
+{
+  "name": "SecureChat – Neural Network",
+  "short_name": "SecureChat",
+  "description": "End-to-end encrypted real-time messaging with neural quantum aesthetics.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#040712",
+  "theme_color": "#00e5ff",
+  "icons": [
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/favicon.ico",
+      "sizes": "64x64",
+      "type": "image/x-icon"
+    }
+  ]
+}

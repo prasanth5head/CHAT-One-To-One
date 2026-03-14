@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useRef } from 'react';
-import { chatAPI, messageAPI, userAPI, mediaAPI } from '../services/api';
+import { chatAPI, messageAPI, userAPI, mediaAPI, groupAPI } from '../services/api';
 import { socketService } from '../services/socket';
 import { useAuth } from './AuthContext';
 import {
@@ -9,7 +9,6 @@ import {
     decryptAESKeyWithRSA,
     generateAESKey
 } from '../utils/encryption';
-import forge from 'node-forge';
 
 const ChatContext = createContext();
 
@@ -21,19 +20,16 @@ export const ChatProvider = ({ children }) => {
     const [activeChat, setActiveChat] = useState(null);
     const [messages, setMessages] = useState([]);
     const [activityStatus, setActivityStatus] = useState({}); // { chatId: { userId: { typing, recording } } }
-    const [nicknames, setNicknames] = useState({}); // { friendId: nickname }
-    // Cache of { userId -> User object } to avoid repeated API calls
+    const [presenceStatus, setPresenceStatus] = useState({}); // { userId: 'online' | 'offline' }
+    const [nicknames, setNicknames] = useState({});
     const userCache = useRef({});
 
-    // ── Connect WebSocket when user logs in ─────────────────────────────────────
     useEffect(() => {
         if (user) {
             loadChats();
             loadNicknames();
             const token = localStorage.getItem('token');
-            socketService.connect(token, () => {
-                console.log('Connected to STOMP over WebSocket');
-            });
+            socketService.connect(token);
         } else {
             socketService.disconnect();
         }
@@ -45,97 +41,91 @@ export const ChatProvider = ({ children }) => {
             const map = {};
             res.data.forEach(n => map[n.friendId] = n.nickname);
             setNicknames(map);
-        } catch (e) {
-            console.error("Failed to load nicknames:", e);
-        }
+        } catch (e) { }
     };
 
-    // ── Subscribe to the active chat channel ────────────────────────────────────
+    useEffect(() => {
+        if (!socketService.connected) return;
+
+        // Presence Subscription
+        socketService.subscribe('/topic/presence', (payload) => {
+            setPresenceStatus(prev => ({ ...prev, [payload.userId]: payload.status }));
+        });
+
+    }, [socketService.connected]);
+
     useEffect(() => {
         if (!activeChat) return;
-
         const chatId = activeChat.id || activeChat._id;
-        console.log("Switching to chat:", chatId);
         
-        setMessages([]);
         loadMessages(chatId);
+        markChatAsRead(chatId);
 
-        // Wait for socket to be connected, retry if needed
         const subscribe = () => {
             if (!socketService.connected) {
                 setTimeout(subscribe, 500);
                 return;
             }
 
-            const chatId = activeChat.id || activeChat._id;
-            socketService.subscribe(`/topic/chat/${chatId}`, (incomingMessage) => {
-                const decrypted = tryDecrypt(incomingMessage);
+            socketService.subscribe(`/topic/chat/${chatId}`, (msg) => {
+                const decrypted = tryDecrypt(msg);
                 setMessages((prev) => {
-                    // Avoid duplicates (message may arrive via WS after we already loaded via REST)
-                    const msgId = incomingMessage.id || incomingMessage._id;
-                    if (prev.find(m => (m.id || m._id) === msgId)) return prev;
+                    if (prev.find(m => (m.id || m._id) === (msg.id || msg._id))) return prev;
                     return [...prev, decrypted];
                 });
             });
 
             socketService.subscribe(`/topic/chat/${chatId}/activity`, (payload) => {
-                const currentUserId = user.id || user._id;
-                if (payload.userId !== currentUserId) {
+                if (payload.userId !== (user?.id || user?._id)) {
                     setActivityStatus((prev) => ({
                         ...prev,
-                        [chatId]: {
-                            ...prev[chatId],
-                            [payload.userId]: { typing: payload.typing, recording: payload.recording }
-                        }
+                        [chatId]: { ...prev[chatId], [payload.userId]: { typing: payload.typing, recording: payload.recording } }
                     }));
                 }
+            });
+
+            socketService.subscribe(`/topic/chat/${chatId}/reaction`, (payload) => {
+                setMessages(prev => prev.map(m => {
+                    if ((m.id || m._id) === payload.messageId) {
+                        const reactions = m.reactions || [];
+                        const filtered = reactions.filter(r => r.userId !== payload.reaction.userId);
+                        return { ...m, reactions: [...filtered, payload.reaction] };
+                    }
+                    return m;
+                }));
             });
         };
 
         subscribe();
     }, [activeChat]);
 
-    // ── Helper: decrypt a message using local private key ────────────────────────
     const tryDecrypt = (msg) => {
         if (!msg || !user) return msg;
-        
         try {
             const privateKeyPem = localStorage.getItem('privateKey');
             const myId = user.id || user._id;
-            
-            // Check for key using myId, and also broad check of the keys object
             const myEncryptedKey = msg.encryptedKeys?.[myId];
             
             if (myEncryptedKey && privateKeyPem) {
                 const aesKeyBytes = decryptAESKeyWithRSA(myEncryptedKey, privateKeyPem);
                 const text = decryptMessage(msg.encryptedMessage, aesKeyBytes);
-                console.log(`Successfully decrypted msg ${msg.id || msg._id}`);
                 return { ...msg, text };
-            } else {
-                // If it's an old message and we don't have the key, label it
-                if (!myEncryptedKey) {
-                    return { ...msg, text: "[Message encrypted with a previous security key]", isStale: true };
-                }
-                console.warn(`Decryption skipped: PrivateKey found? ${!!privateKeyPem}`);
             }
-        } catch (e) {
-            console.warn('Decryption error for message:', msg.id || msg._id, e.message);
-        }
-        return msg; // Return raw (renders as ciphertext if decryption fails)
+        } catch (e) { }
+        return msg;
     };
 
-    // ── Helper: get a user from cache or API ─────────────────────────────────────
     const fetchUser = async (userId, forceRefresh = false) => {
         if (!userId) return null;
         if (!forceRefresh && userCache.current[userId]) return userCache.current[userId];
         try {
             const res = await userAPI.getUserById(userId);
             userCache.current[userId] = res.data;
+            if (res.data.status) {
+                setPresenceStatus(prev => ({ ...prev, [userId]: res.data.status }));
+            }
             return res.data;
-        } catch (err) {
-            console.warn(`User ${userId} not found (404)`);
-            return null;
-        }
+        } catch (err) { return null; }
     };
 
     const loadChats = async () => {
@@ -149,90 +139,86 @@ export const ChatProvider = ({ children }) => {
                 }
                 return chat;
             }));
-            setChats(chatsWithData);
+            setChats(chatsWithData.sort((a,b) => new Date(b.updatedAt) - new Date(a.updatedAt)));
             return chatsWithData;
-        } catch (e) {
-            console.error("Failed to load chats:", e);
-            return [];
-        }
+        } catch (e) { return []; }
     };
 
-    const selectChat = (chat) => {
-        setActiveChat(chat);
-    };
+    const selectChat = (chat) => setActiveChat(chat);
 
     const loadMessages = async (chatId) => {
         try {
             const res = await messageAPI.getMessages(chatId);
             const decrypted = res.data.map(tryDecrypt);
             setMessages(decrypted);
-        } catch (e) {
-            console.error(e);
-        }
+        } catch (e) { }
     };
 
-    // ── Send a message with full E2EE ────────────────────────────────────────────
+    const markChatAsRead = async (chatId) => {
+        try {
+            await messageAPI.markAsRead(chatId);
+        } catch (e) { }
+    };
+
     const sendMessage = async (text, mediaUrl = null, messageType = 'text') => {
         if (!activeChat) return;
         const chatId = activeChat.id || activeChat._id;
-        const currentUserId = user.id || user._id;
-
         try {
-            // 1. Generate a fresh AES-256 key for this message
             const aesKeyBytes = generateAESKey();
-
-            // 2. Encrypt the plaintext with AES-256-GCM
-            const encryptedMessage = encryptMessage(text || 'Media File', aesKeyBytes);
-
-            // 3. For each participant, RSA-encrypt the AES key with their public key
+            const encryptedMessage = encryptMessage(text || 'Neural Packet', aesKeyBytes);
             const encryptedKeys = {};
-            for (const participantId of activeChat.participants) {
-                // Force refresh user data to ensure we have the absolute LATEST public key from server
-                const participantUser = await fetchUser(participantId, true);
-                if (participantUser?.publicKey) {
-                    try {
-                        encryptedKeys[participantId] = encryptAESKeyWithRSA(aesKeyBytes, participantUser.publicKey);
-                    } catch (e) {
-                        console.warn(`Could not encrypt key for user ${participantId}`, e.message);
-                    }
+            for (const pId of activeChat.participants) {
+                const pUser = await fetchUser(pId, true);
+                if (pUser?.publicKey) {
+                    encryptedKeys[pId] = encryptAESKeyWithRSA(aesKeyBytes, pUser.publicKey);
                 }
             }
-
-            // 4. Send the fully encrypted payload over WebSocket — server never sees plaintext
             socketService.sendMessage('/app/chat.sendMessage', {
-                chatId: chatId,
-                senderId: currentUserId,
-                encryptedMessage,
-                encryptedKeys,
-                mediaUrl,
-                messageType,
-                status: 'sent',
+                chatId, senderId: (user.id || user._id),
+                encryptedMessage, encryptedKeys, mediaUrl, messageType, status: 'sent'
             });
-        } catch (err) {
-            console.error("Encryption or Send failed:", err);
-        }
+            // Update last updated at so chat moves to top
+            setChats(prev => prev.map(c => (c.id === chatId || c._id === chatId) ? { ...c, updatedAt: new Date() } : c).sort((a,b) => new Date(b.updatedAt) - new Date(a.updatedAt)));
+        } catch (err) { }
+    };
+
+    const sendReaction = (messageId, emoji) => {
+        if (!activeChat) return;
+        socketService.sendMessage('/app/chat.reaction', {
+            chatId: (activeChat.id || activeChat._id),
+            messageId,
+            reaction: { userId: (user.id || user._id), emoji }
+        });
     };
 
     const sendActivity = (activity) => {
-        // activity = { typing: boolean, recording: boolean }
         if (activeChat) {
-            const chatId = activeChat.id || activeChat._id;
-            const currentUserId = user.id || user._id;
             socketService.sendMessage('/app/chat.activity', {
-                chatId: chatId,
-                userId: currentUserId,
+                chatId: (activeChat.id || activeChat._id),
+                userId: (user.id || user._id),
                 ...activity,
             });
         }
+    };
+
+    const createGroup = async (groupName, participants) => {
+        try {
+            const res = await groupAPI.createGroup({
+                groupName,
+                members: [...participants, user.id || user._id],
+                isGroup: true,
+                createdBy: user.id || user._id
+            });
+            await loadChats();
+            return res.data;
+        } catch (e) { }
     };
 
     const setNickname = async (friendId, nickname) => {
         try {
             await userAPI.setNickname(friendId, nickname);
             setNicknames(prev => ({ ...prev, [friendId]: nickname }));
-        } catch (e) {
-            console.error("Failed to set nickname:", e);
-        }
+        } catch (e) { }
     };
 
     const updateChatWallpaper = async (chatId, wallpaperUrl) => {
@@ -242,51 +228,40 @@ export const ChatProvider = ({ children }) => {
             if ((activeChat?.id || activeChat?._id) === chatId) {
                 setActiveChat(prev => ({ ...prev, wallpaperUrl }));
             }
-        } catch (e) {
-            console.error("Failed to update wallpaper:", e);
-        }
+        } catch (e) { }
     };
 
     const createChat = async (targetUser) => {
         try {
             const res = await chatAPI.createOrGetChat(targetUser.id);
-            const updatedChats = await loadChats();
-            const chatId = res.data.id || res.data._id;
-            const fullChat = updatedChats?.find(c => (c.id || c._id) === chatId);
-            setActiveChat(fullChat || res.data);
-            return fullChat || res.data;
-        } catch (e) {
-            console.error(e);
-        }
+            const updated = await loadChats();
+            const full = updated?.find(c => (c.id || c._id) === (res.data.id || res.data._id));
+            setActiveChat(full || res.data);
+            return full || res.data;
+        } catch (e) { }
     };
 
     const deleteChat = async (chatId) => {
         try {
             await chatAPI.deleteChat(chatId);
             setChats(prev => prev.filter(c => (c.id || c._id) !== chatId));
-            if ((activeChat?.id || activeChat?._id) === chatId) {
-                setActiveChat(null);
-                setMessages([]);
-            }
-        } catch (e) {
-            console.error("Failed to delete chat:", e);
-        }
+            if ((activeChat?.id || activeChat?._id) === chatId) setActiveChat(null);
+        } catch (e) { }
     };
 
     const deleteMessage = async (messageId) => {
         try {
             await messageAPI.deleteMessage(messageId);
             setMessages(prev => prev.filter(m => (m.id || m._id) !== messageId));
-        } catch (e) {
-            console.error("Failed to delete message:", e);
-        }
+        } catch (e) { }
     };
 
     return (
         <ChatContext.Provider value={{
             chats, activeChat, messages, selectChat,
-            sendMessage, loadChats, sendActivity, activityStatus, createChat,
-            nicknames, setNickname, updateChatWallpaper, deleteChat, deleteMessage
+            sendMessage, sendReaction, loadChats, sendActivity, activityStatus, presenceStatus,
+            createChat, createGroup, nicknames, setNickname, 
+            updateChatWallpaper, deleteChat, deleteMessage
         }}>
             {children}
         </ChatContext.Provider>

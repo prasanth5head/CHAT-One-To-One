@@ -22,7 +22,6 @@ public class UserController {
     @Autowired
     private FriendNicknameRepository nicknameRepository;
 
-    /** Get current user's own profile */
     @GetMapping("/me")
     public ResponseEntity<User> getCurrentUser(Authentication authentication) {
         String currentUserId = (String) authentication.getPrincipal();
@@ -31,21 +30,17 @@ public class UserController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
-    /** Fetch a specific user by ID (used to get public key for E2EE) */
     @GetMapping("/{id}")
-    public ResponseEntity<User> getUserById(@PathVariable String id, Authentication authentication) {
+    public ResponseEntity<User> getUserById(@PathVariable String id) {
         return userRepository.findById(id)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
 
-    /** Search users by email — excludes the caller from results */
     @GetMapping("/search")
     public ResponseEntity<List<User>> searchUsers(@RequestParam("email") String email, Authentication authentication) {
         String currentUserId = (String) authentication.getPrincipal();
-        List<User> results = userRepository.findByEmail(email)
-                .map(List::of)
-                .orElseGet(List::of)
+        List<User> results = userRepository.findByEmailContainingIgnoreCase(email)
                 .stream()
                 .filter(u -> !u.getId().equals(currentUserId))
                 .collect(Collectors.toList());
@@ -58,6 +53,8 @@ public class UserController {
         return userRepository.findById(currentUserId).map(user -> {
             if (userUpdates.getDisplayName() != null) user.setDisplayName(userUpdates.getDisplayName());
             if (userUpdates.getAvatar() != null) user.setAvatar(userUpdates.getAvatar());
+            if (userUpdates.getBio() != null) user.setBio(userUpdates.getBio());
+            if (userUpdates.getStatus() != null) user.setStatus(userUpdates.getStatus());
             return ResponseEntity.ok(userRepository.save(user));
         }).orElse(ResponseEntity.notFound().build());
     }

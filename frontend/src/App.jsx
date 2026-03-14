@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ChatProvider } from './context/ChatContext';
@@ -9,9 +10,7 @@ import { ThemeProvider, CssBaseline, Box, CircularProgress } from '@mui/material
 import glowingTheme from './theme';
 import { GoogleOAuthProvider } from '@react-oauth/google';
 import InstallPWA from './components/InstallPWA';
-
-// These components MUST be rendered as children of AuthProvider
-// so they can call useAuth() correctly.
+import { notificationService } from './services/notification';
 
 const PrivateRoute = ({ children }) => {
   const { user, loading } = useAuth();
@@ -30,18 +29,19 @@ const PublicRoute = ({ children }) => {
       <CircularProgress color="primary" />
     </Box>
   );
-  // If already logged in redirect to chat — skip welcome & login pages
   return user ? <Navigate to="/chat" replace /> : children;
 };
 
-// Inner router tree — rendered INSIDE AuthProvider so guards work
 function AppRoutes() {
+  useEffect(() => {
+    notificationService.requestPermission();
+  }, []);
+
   return (
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<PublicRoute><Welcome /></PublicRoute>} />
         <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
-        <Route path="/lohgin" element={<Navigate to="/login" replace />} />
         <Route path="/register" element={<PublicRoute><Register /></PublicRoute>} />
         <Route path="/chat" element={<PrivateRoute><ChatPage /></PrivateRoute>} />
         <Route path="*" element={<Navigate to="/" replace />} />
