@@ -88,9 +88,16 @@ export default function ChatPage() {
     const mediaRecorder = useRef(null);
     const timerRef = useRef(null);
 
-    // Auto-Scroll
-    useEffect(() => {
+    // Auto-Scroll to bottom
+    const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    };
+
+    useEffect(() => {
+        scrollToBottom();
+        // Fallback for media loading
+        const timer = setTimeout(scrollToBottom, 100);
+        return () => clearTimeout(timer);
     }, [messages]);
 
     // Auto-Encrypt logic
@@ -311,11 +318,21 @@ export default function ChatPage() {
 
                     {uploading && <LinearProgress sx={{ position: 'absolute', top: 72, left: 0, right: 0, zIndex: 2, height: 2, bgcolor: 'transparent', '& .MuiLinearProgress-bar': { bgcolor: '#00e5ff' } }} />}
 
-                    <Box sx={{ 
-                        flex: 1, overflowY: 'auto', p: isMobile ? 2 : 4, display: 'flex', flexDirection: 'column', gap: 3, 
-                        backgroundImage: activeChat.wallpaperUrl ? `url(${activeChat.wallpaperUrl})` : 'radial-gradient(circle at 50% 50%, rgba(0,229,255,0.02) 0%, transparent 100%)',
-                        backgroundSize: 'cover', bgcolor: '#040712'
-                    }}>
+                    <Box 
+                        id="neural-message-feed"
+                        sx={{ 
+                            flex: 1, 
+                            overflowY: 'auto', 
+                            p: isMobile ? 2 : 4, 
+                            display: 'flex', 
+                            flexDirection: 'column', 
+                            gap: 3, 
+                            backgroundImage: activeChat.wallpaperUrl ? `url(${activeChat.wallpaperUrl})` : 'radial-gradient(circle at 50% 50%, rgba(0,229,255,0.02) 0%, transparent 100%)',
+                            backgroundSize: 'cover', 
+                            bgcolor: '#040712',
+                            scrollBehavior: 'smooth'
+                        }}
+                    >
                         {messages.map((msg, i) => {
                             const isMine = msg.senderId === (user.id || user._id);
                             const msgId = msg.id || msg._id || `m-${i}`;
