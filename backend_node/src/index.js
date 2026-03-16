@@ -18,27 +18,56 @@ const app = express();
 const server = http.createServer(app);
 
 // ── CORS Configuration ─────────────────────────────────────────────────────────
+const defaultOrigins = ['http://localhost:5173', 'http://localhost:3000', 'https://securetalk-chat.onrender.com'];
 const allowedOrigins = process.env.CORS_ORIGINS
-  ? process.env.CORS_ORIGINS.split(',').map(o => o.trim())
-  : ['http://localhost:5173', 'http://localhost:3000'];
+  ? process.env.CORS_ORIGINS.split(',').map(o => o.trim()).concat(defaultOrigins)
+  : defaultOrigins;
 
 const corsOptions = {
-  origin: allowedOrigins,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.indexOf(origin) !== -1 || allowedOrigins.includes('*')) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   credentials: true,
 };
 
 // ── Socket.IO ───────────────────────────────────────────────────────────────────
 const io = new Server(server, {
-  cors: corsOptions,
+  cors: {
+    origin: allowedOrigins,
+    methods: ['GET', 'POST', 'OPTIONS'],
+    credentials: true,
+  },
   pingTimeout: 60000,
   pingInterval: 25000,
   transports: ['websocket', 'polling'],
 });
 
 // ── Middleware ───────────────────────────────────────────────────────────────────
-app.use(helmet({ contentSecurityPolicy: false, crossOriginResourcePolicy: { policy: 'cross-origin' } }));
+app.use(helmet({ contentSecurityPolicy: false, crossOriginResourcePolicy: false }));
 app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
+
+// Explicit fallback headers just in case for Render
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (allowedOrigins.includes(origin)) {
+    res.header('Access-Control-Allow-Origin', origin);
+  } else if (!origin) {
+    res.header('Access-Control-Allow-Origin', '*');
+  }
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS,PATCH');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  next();
+});
+
 app.use(compression());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));

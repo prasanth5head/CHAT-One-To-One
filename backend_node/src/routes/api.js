@@ -22,6 +22,10 @@ router.post('/auth/google', authController.authenticate);
 router.post('/auth/test', authController.authenticateTest);
 router.get('/auth/me', authMiddleware, authController.getCurrentUser);
 
+// Explicit GET routes for browser payload testing (as requested)
+router.get('/auth/test', (req, res) => res.json({ message: 'Auth test route working. Use POST to actually login.' }));
+router.get('/auth/google', (req, res) => res.json({ message: 'Google Auth route working. Use POST with token to login.' }));
+
 // ── Users ───────────────────────────────────────────────────────────────────────
 router.get('/users/search', authMiddleware, userController.searchUsers);
 router.get('/users/nicknames', authMiddleware, userController.getNicknames);
