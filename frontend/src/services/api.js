@@ -28,6 +28,7 @@ api.interceptors.response.use(
 
 export const authAPI = {
     loginWithGoogle: (data) => api.post('/auth/google', data),
+    loginWithTest: (data) => api.post('/auth/test', data),
 };
 
 export const userAPI = {

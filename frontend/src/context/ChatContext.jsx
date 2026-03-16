@@ -19,6 +19,7 @@ export const ChatProvider = ({ children }) => {
     const [chats, setChats] = useState([]);
     const [activeChat, setActiveChat] = useState(null);
     const [messages, setMessages] = useState([]);
+    const [socketConnected, setSocketConnected] = useState(false);
     const [activityStatus, setActivityStatus] = useState({}); // { chatId: { userId: { typing, recording } } }
     const [presenceStatus, setPresenceStatus] = useState({}); // { userId: 'online' | 'offline' }
     const [nicknames, setNicknames] = useState({});
@@ -29,9 +30,16 @@ export const ChatProvider = ({ children }) => {
             loadChats();
             loadNicknames();
             const token = localStorage.getItem('token');
-            socketService.connect(token);
+            socketService.connect(token, () => setSocketConnected(true), () => setSocketConnected(false));
+            
+            // Periodically check connection
+            const interval = setInterval(() => {
+                setSocketConnected(socketService.connected);
+            }, 5000);
+            return () => clearInterval(interval);
         } else {
             socketService.disconnect();
+            setSocketConnected(false);
         }
     }, [user]);
 
@@ -117,31 +125,47 @@ export const ChatProvider = ({ children }) => {
         if (!msg || !msg.encryptedMessage || !user) return msg;
         try {
             const privateKeyPem = localStorage.getItem('privateKey');
-            if (!privateKeyPem) return msg;
+            if (!privateKeyPem) {
+                 console.warn("[Neural Decryption] Missing private key in local storage.");
+                 return { ...msg, text: "🔒 Decryption Failed: Private key missing. Please log in again." };
+            }
 
             const myId = user.id || user._id;
             const keys = msg.encryptedKeys || {};
             
-            // SUPER ROBUST KEY MATCHING
-            // 1. Try direct matches
+            // 1. Try various ID matches
             let myEncryptedKey = keys[myId] || keys[user.id] || keys[user._id];
             
-            // 2. If no direct match, look for ANY standard hex ID format key (if ID is 24 chars)
-            if (!myEncryptedKey && myId?.length === 24) {
-                 myEncryptedKey = keys[myId];
+            // 2. Scan keys if IDs are potentially different formats
+            if (!myEncryptedKey) {
+                const myIdStr = String(myId);
+                const foundKey = Object.entries(keys).find(([k]) => String(k) === myIdStr);
+                if (foundKey) myEncryptedKey = foundKey[1];
             }
 
             if (myEncryptedKey) {
-                const aesKeyBytes = decryptAESKeyWithRSA(myEncryptedKey, privateKeyPem);
-                const text = decryptMessage(msg.encryptedMessage, aesKeyBytes);
-                return { ...msg, text };
+                try {
+                    const aesKeyBytes = decryptAESKeyWithRSA(myEncryptedKey, privateKeyPem);
+                    const text = decryptMessage(msg.encryptedMessage, aesKeyBytes);
+                    return { ...msg, text };
+                } catch (rsaErr) {
+                    console.error("[Neural Decryption] RSA Error:", rsaErr.message);
+                    return { ...msg, text: "🔒 Decryption Failed: Neural signature mismatch. Your security keys might have changed." };
+                }
             } else {
-                console.warn(`[Neural Decryption] Failed to find key for user ${myId}. Available keys in packet:`, Object.keys(keys));
+                console.warn(`[Neural Decryption] No key found for user ${myId}. Available:`, Object.keys(keys));
+                return { ...msg, text: "🔒 Decryption Failed: This message was not encrypted for your current session." };
             }
         } catch (e) {
-            console.error("[Neural Decryption] Error processing packet:", e);
+            console.error("[Neural Decryption] Fatal error:", e);
+            return { ...msg, text: "🔒 Decryption Failed: Neural packet corruption." };
         }
-        return msg;
+    };
+
+    const syncKeys = async () => {
+        userCache.current = {};
+        await loadChats();
+        if (activeChat) await loadMessages(activeChat.id || activeChat._id);
     };
 
     const fetchUser = async (userId, forceRefresh = false) => {
@@ -191,6 +215,11 @@ export const ChatProvider = ({ children }) => {
 
     const sendMessage = async (text, mediaUrl = null, messageType = 'text') => {
         if (!activeChat) return;
+        if (!socketService.connected) {
+            alert("⚠️ Neural link severed. Reconnecting... (Message cached in memory)");
+            // Optional: Implement a queue or just wait for reconnect
+            return;
+        }
         const chatId = activeChat.id || activeChat._id;
         const myId = user.id || user._id;
 
@@ -316,7 +345,7 @@ export const ChatProvider = ({ children }) => {
             chats, activeChat, messages, selectChat,
             sendMessage, sendReaction, loadChats, sendActivity, activityStatus, presenceStatus,
             createChat, createGroup, nicknames, setNickname, 
-            updateChatWallpaper, deleteChat, deleteMessage
+            updateChatWallpaper, deleteChat, deleteMessage, syncKeys, socketConnected
         }}>
             {children}
         </ChatContext.Provider>

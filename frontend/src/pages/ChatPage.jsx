@@ -47,7 +47,7 @@ export default function ChatPage() {
     const { 
         chats, activeChat, messages, selectChat, sendMessage, sendReaction,
         sendActivity, activityStatus, presenceStatus, createChat, createGroup,
-        nicknames, setNickname, updateChatWallpaper, deleteChat, deleteMessage
+        nicknames, setNickname, updateChatWallpaper, deleteChat, deleteMessage, syncKeys, socketConnected
     } = useChat();
     const navigate = useNavigate();
     const theme = useTheme();
@@ -226,8 +226,8 @@ export default function ChatPage() {
                     <Avatar src={user.avatar} sx={{ border: '2px solid #00e5ff', width: 44, height: 44 }} />
                     <Box>
                         <Typography variant="subtitle2" fontWeight="800">{user.displayName || user.name || 'Operative'}</Typography>
-                        <Typography variant="caption" sx={{ color: '#00e5ff', display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                            <Box sx={{ width: 6, height: 6, bgcolor: '#00e5ff', borderRadius: '50%' }} /> Active
+                        <Typography variant="caption" sx={{ color: socketConnected ? '#00e5ff' : '#ff4444', display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                            <Box sx={{ width: 6, height: 6, bgcolor: socketConnected ? '#00e5ff' : '#ff4444', borderRadius: '50%', boxShadow: socketConnected ? '0 0 10px #00e5ff' : 'none' }} /> {socketConnected ? 'Link Active' : 'Link Severed'}
                         </Typography>
                     </Box>
                 </Box>
@@ -258,21 +258,28 @@ export default function ChatPage() {
                     const activeText = actStatus ? (Object.values(actStatus).some(s => s.recording) ? "recording voice..." : (Object.values(actStatus).some(s => s.typing) ? "typing..." : null)) : null;
 
                     return (
-                        <ListItem key={chatId} onClick={() => { selectChat(chat); if(isMobile) setSidebarOpen(false); }} 
+                        <ListItem key={chatId} 
                             sx={{ borderRadius: 2, mb: 0.5, bgcolor: isSelected ? 'rgba(0,229,255,0.08)' : 'transparent', cursor: 'pointer', transition: '0.2s', '&:hover': { bgcolor: 'rgba(255,255,255,0.04)' } }}
+                            secondaryAction={
+                                <IconButton edge="end" size="small" onClick={(e) => { e.stopPropagation(); if(window.confirm('Erase this neural link from records?')) deleteChat(chatId); }} sx={{ color: 'rgba(255,255,255,0.2)', '&:hover': { color: '#ff4444' } }}>
+                                    <DeleteIcon fontSize="inherit" />
+                                </IconButton>
+                            }
                         >
-                            <ListItemAvatar>
-                                <Badge overlap="circular" anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }} variant="dot" color={isOnline ? "success" : "default"} invisible={chat.isGroup}>
-                                    <Avatar src={chat.otherUser?.avatar} sx={{ width: 48, height: 48, border: isSelected ? '2px solid #00e5ff' : 'none', opacity: isOnline || chat.isGroup ? 1 : 0.5 }}>
-                                        {chat.isGroup ? <GroupIcon /> : <PersonIcon />}
-                                    </Avatar>
-                                </Badge>
-                            </ListItemAvatar>
-                            <ListItemText 
-                                primary={<Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><Typography variant="subtitle2" sx={{ fontWeight: isSelected ? 800 : 500 }}>{name}</Typography><Typography variant="caption" sx={{ opacity: 0.4 }}>{chat.updatedAt ? new Date(chat.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</Typography></Box>} 
-                                secondary={activeText || chat.lastMessage || "Identity verified"}
-                                secondaryTypographyProps={{ color: activeText ? '#00e5ff' : 'rgba(255,255,255,0.5)', noWrap: true, sx: { fontSize: '0.75rem' } }} 
-                            />
+                            <Box sx={{ display: 'flex', width: '100%', alignItems: 'center' }} onClick={() => { selectChat(chat); if(isMobile) setSidebarOpen(false); }}>
+                                <ListItemAvatar>
+                                    <Badge overlap="circular" anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }} variant="dot" color={isOnline ? "success" : "default"} invisible={chat.isGroup}>
+                                        <Avatar src={chat.otherUser?.avatar} sx={{ width: 48, height: 48, border: isSelected ? '2px solid #00e5ff' : 'none', opacity: isOnline || chat.isGroup ? 1 : 0.5 }}>
+                                            {chat.isGroup ? <GroupIcon /> : <PersonIcon />}
+                                        </Avatar>
+                                    </Badge>
+                                </ListItemAvatar>
+                                <ListItemText 
+                                    primary={<Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><Typography variant="subtitle2" sx={{ fontWeight: isSelected ? 800 : 500 }}>{name}</Typography><Typography variant="caption" sx={{ opacity: 0.4 }}>{chat.updatedAt ? new Date(chat.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</Typography></Box>} 
+                                    secondary={activeText || chat.lastMessage || "Identity verified"}
+                                    secondaryTypographyProps={{ color: activeText ? '#00e5ff' : 'rgba(255,255,255,0.5)', noWrap: true, sx: { fontSize: '0.75rem' } }} 
+                                />
+                            </Box>
                         </ListItem>
                     );
                 })}
@@ -310,6 +317,7 @@ export default function ChatPage() {
                             </Box>
                         </Box>
                         <Box sx={{ display: 'flex', gap: 1 }}>
+                            <Tooltip title="Resync Neural Link"><IconButton sx={{ color: '#00e5ff' }} onClick={syncKeys}><GppGoodIcon /></IconButton></Tooltip>
                             <Tooltip title="Neural Files"><IconButton sx={{ color: '#00e5ff' }} component="label"><FileIcon /><input type="file" hidden onChange={(e) => { const f = e.target.files[0]; if(f) setSelectedFile(f); }} /></IconButton></Tooltip>
                             <Tooltip title="Neural Images"><IconButton sx={{ color: '#00e5ff' }} component="label"><ImageIcon /><input type="file" hidden accept="image/*" onChange={(e) => { const f = e.target.files[0]; if(f){ setSelectedImage(f); setImagePreview(URL.createObjectURL(f)); } }} /></IconButton></Tooltip>
                             <IconButton sx={{ color: '#00e5ff' }} onClick={() => setSettingsOpen(true)}><SettingsIcon /></IconButton>
@@ -397,6 +405,10 @@ export default function ChatPage() {
                                                 {['❤️', '😂', '😮', '😢', '🔥', '👍'].map(emoji => (
                                                     <IconButton key={emoji} size="small" onClick={() => sendReaction(msgId, emoji)} sx={{ fontSize: '1.2rem', p: 0.6, transition: '0.2s', '&:hover': { transform: 'scale(1.3)' } }}>{emoji}</IconButton>
                                                 ))}
+                                                <Divider orientation="vertical" flexItem sx={{ mx: 0.5, bgcolor: 'rgba(255,255,255,0.1)' }} />
+                                                <IconButton size="small" onClick={() => { if(window.confirm('Delete this neural record?')) deleteMessage(msgId); }} sx={{ color: '#ff4444', p: 0.6, '&:hover': { bgcolor: 'rgba(255,68,68,0.1)' } }}>
+                                                    <DeleteIcon fontSize="small" />
+                                                </IconButton>
                                             </Paper>
                                         )}
                                     </Box>

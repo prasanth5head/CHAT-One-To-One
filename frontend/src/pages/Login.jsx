@@ -15,7 +15,12 @@ import {
     IconButton,
     Button,
     Fade,
-    Divider
+    Divider,
+    Dialog,
+    DialogTitle,
+    DialogContent,
+    DialogActions,
+    TextField
 } from '@mui/material';
 import {
     ArrowBack as ArrowBackIcon,
@@ -92,6 +97,30 @@ export default function Login() {
         flow: 'implicit',
         scope: 'email profile openid',
     });
+
+    const [testLoginOpen, setTestLoginOpen] = useState(false);
+    const [testEmail, setTestEmail] = useState("");
+    const [testPassword, setTestPassword] = useState("");
+
+    const handleTestLogin = async () => {
+        setLoading(true);
+        setError('');
+        try {
+            const keys = await generateKeyPair();
+            const res = await authAPI.loginWithTest({
+                email: testEmail,
+                password: testPassword,
+                publicKey: keys.publicKey
+            });
+            login(res.data.user, res.data.token, keys.privateKey);
+            navigate('/chat');
+        } catch (err) {
+            setError(err?.response?.data || 'Test login failed.');
+        } finally {
+            setLoading(false);
+            setTestLoginOpen(false);
+        }
+    };
 
     return (
         <Box
@@ -298,27 +327,31 @@ export default function Login() {
                         </Stack>
 
                         <Box sx={{ mt: 5, width: '100%', textAlign: 'center' }}>
-                            <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.4)', fontWeight: 500 }}>
-                                Need a secure workspace?{' '}
-                                <Button
-                                    variant="text"
-                                    size="small"
-                                    sx={{
-                                        p: 0,
-                                        minWidth: 'auto',
-                                        fontWeight: 800,
-                                        color: '#00e5ff',
-                                        fontSize: '0.85rem',
-                                        '&:hover': { background: 'transparent', textDecoration: 'underline' }
-                                    }}
-                                    onClick={() => navigate('/register')}
-                                >
-                                    Join Network
-                                </Button>
-                            </Typography>
+                            <Button
+                                variant="text"
+                                size="small"
+                                onClick={() => setTestLoginOpen(true)}
+                                sx={{ color: 'rgba(0,229,255,0.3)', fontWeight: 800, '&:hover': { color: '#00e5ff' } }}
+                            >
+                                Neural Test Access
+                            </Button>
                         </Box>
                     </Paper>
                 </Fade>
+
+                <Dialog open={testLoginOpen} onClose={() => setTestLoginOpen(false)} PaperProps={{ sx: { bgcolor: '#050a15', border: '1px solid #00e5ff', color: '#fff' } }}>
+                    <DialogTitle sx={{ color: '#00e5ff', fontWeight: 900 }}>Test Authentication</DialogTitle>
+                    <DialogContent>
+                        <Stack spacing={3} sx={{ mt: 1 }}>
+                            <TextField fullWidth label="Test Email" value={testEmail} onChange={(e) => setTestEmail(e.target.value)} sx={{ '& label': { color: 'rgba(255,255,255,0.5)' }, '& input': { color: '#fff' } }} />
+                            <TextField fullWidth label="Test Password" type="password" value={testPassword} onChange={(e) => setTestPassword(e.target.value)} sx={{ '& label': { color: 'rgba(255,255,255,0.5)' }, '& input': { color: '#fff' } }} />
+                        </Stack>
+                    </DialogContent>
+                    <DialogActions sx={{ p: 3 }}>
+                        <Button onClick={() => setTestLoginOpen(false)} sx={{ color: 'rgba(255,255,255,0.5)' }}>Abort</Button>
+                        <Button variant="contained" onClick={handleTestLogin} sx={{ bgcolor: '#00e5ff', color: '#000', fontWeight: 900 }}>Connect</Button>
+                    </DialogActions>
+                </Dialog>
 
                 <Box sx={{ mt: 6, textAlign: 'center' }}>
                     <Typography

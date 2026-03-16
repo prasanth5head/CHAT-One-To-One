@@ -23,4 +23,14 @@ public class AuthController {
             return ResponseEntity.badRequest().body("Authentication Failed: " + e.getMessage());
         }
     }
+
+    @PostMapping("/test")
+    public ResponseEntity<?> authenticateTest(@RequestBody com.securechat.payload.TestLoginRequest request) {
+        try {
+            AuthResponse response = authService.authenticateTest(request);
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Test Login Failed: " + e.getMessage());
+        }
+    }
 }

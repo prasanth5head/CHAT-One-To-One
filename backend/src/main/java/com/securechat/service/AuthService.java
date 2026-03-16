@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.securechat.model.User;
 import com.securechat.payload.AuthResponse;
 import com.securechat.payload.LoginRequest;
+import com.securechat.payload.TestLoginRequest;
 import com.securechat.repository.UserRepository;
 import com.securechat.security.JwtProvider;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -34,8 +35,6 @@ public class AuthService {
         String picture;
 
         // Strategy 1 — try Google id_token (tokeninfo endpoint)
-        // Used when frontend sends an id_token (e.g. via OneTap or authorization code
-        // flow)
         try {
             String tokenInfoUrl = "https://oauth2.googleapis.com/tokeninfo?id_token=" + token;
             String response = restTemplate.getForObject(tokenInfoUrl, String.class);
@@ -50,7 +49,6 @@ public class AuthService {
 
         } catch (Exception idTokenException) {
             // Strategy 2 — treat token as an access_token and call Google userinfo
-            // Used when frontend uses the implicit flow (useGoogleLogin default)
             try {
                 HttpHeaders headers = new HttpHeaders();
                 headers.setBearerAuth(token);
@@ -81,7 +79,6 @@ public class AuthService {
             user = userOpt.get();
             user.setAvatar(picture);
             user.setName(name);
-            // Update public key if a new one is provided (e.g. user lost their private key)
             if (loginRequest.getPublicKey() != null && !loginRequest.getPublicKey().isEmpty()) {
                 user.setPublicKey(loginRequest.getPublicKey());
             }
@@ -91,6 +88,37 @@ public class AuthService {
             user.setName(name);
             user.setAvatar(picture);
             user.setPublicKey(loginRequest.getPublicKey());
+        }
+
+        user = userRepository.save(user);
+        String jwt = jwtProvider.generateToken(user.getId(), user.getEmail());
+        return new AuthResponse(jwt, user);
+    }
+
+    public AuthResponse authenticateTest(TestLoginRequest request) throws Exception {
+        String email = request.getEmail();
+        String password = request.getPassword();
+
+        if (!email.endsWith("@test.com")) {
+            throw new Exception("Only @test.com accounts allowed for test login.");
+        }
+
+        if (!"test123".equals(password)) {
+            throw new Exception("Invalid test password.");
+        }
+
+        Optional<User> userOpt = userRepository.findByEmail(email);
+        User user;
+
+        if (userOpt.isPresent()) {
+            user = userOpt.get();
+            if (request.getPublicKey() != null) user.setPublicKey(request.getPublicKey());
+        } else {
+            user = new User();
+            user.setEmail(email);
+            user.setName(email.split("@")[0]);
+            user.setPublicKey(request.getPublicKey());
+            user.setStatus("online");
         }
 
         user = userRepository.save(user);
