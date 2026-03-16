@@ -249,31 +249,35 @@ export default function ChatPage() {
             </Box>
 
             {/* ── Search Results ─────────────────────────────────────────────────── */}
-            {searchEmail.length > 0 && (
-                <List sx={{ bgcolor: 'rgba(0,229,255,0.05)', borderBottom: '1px solid rgba(0,229,255,0.1)' }}>
-                    {searchResults.length > 0 ? searchResults.map(u => (
-                        <ListItem key={u.id || u._id} button onClick={async () => { await createChat(u); setSearchEmail(""); setSearchResults([]); }}>
-                            <ListItemAvatar><Avatar src={u.avatar} /></ListItemAvatar>
-                            <ListItemText primary={u.displayName || u.name} secondary={u.email} />
-                        </ListItem>
-                    )) : (
-                        searchEmail.endsWith("@test.com") && (
-                            <ListItem button onClick={async () => { 
-                                // Virtual user for @test.com accounts that haven't logged in yet
-                                await createChat({ id: searchEmail, email: searchEmail, name: searchEmail.split('@')[0] }); 
-                                setSearchEmail(""); 
-                            }}>
-                                <ListItemAvatar><Avatar sx={{ bgcolor: '#00e5ff', color: '#000' }}><PersonAddIcon /></Avatar></ListItemAvatar>
-                                <ListItemText primary="Summon Neural Identity" secondary={`Connect with ${searchEmail}`} />
+            {searchEmail.trim().length > 0 && (
+                <Box sx={{ bgcolor: 'rgba(0,229,255,0.1)', borderBottom: '1px solid rgba(0,229,255,0.2)', maxHeight: 200, overflowY: 'auto' }}>
+                    <Typography variant="caption" sx={{ px: 2, pt: 1, display: 'block', color: '#00e5ff', fontWeight: 800, textTransform: 'uppercase', fontSize: '0.65rem' }}>
+                        Neural Search Results
+                    </Typography>
+                    <List dense>
+                        {(searchResults || []).length > 0 ? (searchResults || []).map(u => (
+                            <ListItem key={u.id || u._id} button onClick={async () => { await createChat(u); setSearchEmail(""); setSearchResults([]); }}>
+                                <ListItemAvatar><Avatar src={u.avatar} sx={{ width: 32, height: 32 }} /></ListItemAvatar>
+                                <ListItemText primary={u.displayName || u.name} secondary={u.email} secondaryTypographyProps={{ sx: { fontSize: '0.7rem', opacity: 0.6 } }} />
                             </ListItem>
-                        )
-                    )}
-                    {searchResults.length === 0 && !searchEmail.endsWith("@test.com") && (
-                        <Typography variant="caption" sx={{ p: 2, display: 'block', opacity: 0.5, textAlign: 'center' }}>
-                            No identities found.
-                        </Typography>
-                    )}
-                </List>
+                        )) : (
+                            searchEmail.toLowerCase().endsWith("@test.com") ? (
+                                <ListItem button onClick={async () => { 
+                                    await createChat({ id: searchEmail.toLowerCase(), email: searchEmail.toLowerCase(), name: searchEmail.split('@')[0] }); 
+                                    setSearchEmail(""); 
+                                    setSearchResults([]);
+                                }}>
+                                    <ListItemAvatar><Avatar sx={{ bgcolor: '#00e5ff', color: '#000', width: 32, height: 32 }}><PersonAddIcon fontSize="small" /></Avatar></ListItemAvatar>
+                                    <ListItemText primary="Summon Neural Identity" secondary={`Connect with ${searchEmail}`} secondaryTypographyProps={{ sx: { fontSize: '0.7rem', opacity: 0.6 } }} />
+                                </ListItem>
+                            ) : (
+                                <Typography variant="caption" sx={{ p: 2, display: 'block', opacity: 0.5, textAlign: 'center' }}>
+                                    No identities found in this shard.
+                                </Typography>
+                            )
+                        )}
+                    </List>
+                </Box>
             )}
 
             <List sx={{ flex: 1, overflowY: 'auto', p: 1 }}>
