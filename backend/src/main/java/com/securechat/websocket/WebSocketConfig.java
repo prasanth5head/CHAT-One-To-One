@@ -27,10 +27,9 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
-        String[] origins = allowedOrigins.split(",");
         // Endpoint that clients will use to connect to our websocket server
-        registry.addEndpoint("/ws")
-                .setAllowedOrigins(origins)
+        registry.addEndpoint("/ws/chat")
+                .setAllowedOriginPatterns("*")
                 .withSockJS();
     }
 }

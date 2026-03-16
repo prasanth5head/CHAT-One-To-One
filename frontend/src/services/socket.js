@@ -1,7 +1,7 @@
 import { Client } from '@stomp/stompjs';
 import SockJS from 'sockjs-client';
 
-const SOCKET_URL = import.meta.env.VITE_WS_URL || 'http://localhost:8080/ws';
+const SOCKET_URL = import.meta.env.VITE_WS_URL || 'http://localhost:8080/ws/chat';
 
 class SocketService {
     constructor() {
