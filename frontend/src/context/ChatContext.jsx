@@ -335,7 +335,7 @@ export const ChatProvider = ({ children }) => {
 
     // ── Activity Status ─────────────────────────────────────────────────────────
     const sendActivity = (activity) => {
-        if (activeChat) {
+        if (activeChat && socketConnected) {
             socketService.emit('activity', {
                 chatId: activeChat.id || activeChat._id,
                 userId: user.id || user._id,

@@ -1,6 +1,8 @@
 import { io } from 'socket.io-client';
 
-const SOCKET_URL = import.meta.env.VITE_WS_URL || 'http://localhost:8080';
+const rawUrl = import.meta.env.VITE_WS_URL || 'http://localhost:8080';
+// Fix invalid namespace error: strip trailing slash from Render URLs
+const SOCKET_URL = rawUrl.replace(/\/+$/, '');
 
 class SocketService {
     constructor() {
@@ -17,9 +19,9 @@ class SocketService {
         this.socket = io(SOCKET_URL, {
             transports: ['websocket', 'polling'],
             reconnection: true,
-            reconnectionDelay: 2000,
-            reconnectionDelayMax: 10000,
-            reconnectionAttempts: Infinity,
+            reconnectionAttempts: 10,
+            reconnectionDelay: 1000,
+            reconnectionDelayMax: 5000,
             timeout: 20000,
         });
 
@@ -80,7 +82,9 @@ class SocketService {
         if (this.socket?.connected) {
             this.socket.emit(event, payload);
         } else {
-            console.warn(`[Socket.IO] Cannot emit '${event}' — not connected`);
+            if (event !== 'activity') {
+                console.warn(`[Socket.IO] Cannot emit '${event}' — not connected`);
+            }
         }
     }
 
