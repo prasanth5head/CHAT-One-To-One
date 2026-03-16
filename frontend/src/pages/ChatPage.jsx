@@ -32,7 +32,8 @@ import {
     AttachFile as FileIcon,
     Description as DocumentIcon,
     PlayArrow as PlayIcon,
-    Pause as PauseIcon
+    Pause as PauseIcon,
+    GppGood as GppGoodIcon
 } from '@mui/icons-material';
 
 const visualEncrypt = (text) => {

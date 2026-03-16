@@ -1,75 +1,96 @@
-import { Client } from '@stomp/stompjs';
-import SockJS from 'sockjs-client';
+import { io } from 'socket.io-client';
 
-const SOCKET_URL = import.meta.env.VITE_WS_URL || 'http://localhost:8080/ws/chat';
+const SOCKET_URL = import.meta.env.VITE_WS_URL || 'http://localhost:8080';
 
 class SocketService {
     constructor() {
-        this.stompClient = null;
+        this.socket = null;
         this.connected = false;
-        this.subscriptions = new Map();
+        this.handlers = new Map(); // event -> Set of callbacks
+        this.userId = null;
     }
 
-    connect(token, onConnected, onError) {
-        if (this.connected) return;
+    connect(userId, onConnected, onError) {
+        if (this.socket?.connected) return;
+        this.userId = userId;
 
-        const socket = new SockJS(SOCKET_URL);
-        this.stompClient = new Client({
-            webSocketFactory: () => socket,
-            debug: (str) => console.log(str),
-            connectHeaders: {
-                Authorization: `Bearer ${token}`
-            },
-            reconnectDelay: 5000,
-            heartbeatIncoming: 4000,
-            heartbeatOutgoing: 4000,
+        this.socket = io(SOCKET_URL, {
+            transports: ['websocket', 'polling'],
+            reconnection: true,
+            reconnectionDelay: 2000,
+            reconnectionDelayMax: 10000,
+            reconnectionAttempts: Infinity,
+            timeout: 20000,
         });
 
-        this.stompClient.onConnect = (frame) => {
+        this.socket.on('connect', () => {
             this.connected = true;
-            if (onConnected) onConnected(frame);
-        };
-
-        this.stompClient.onStompError = (frame) => {
-            console.error('Broker reported error: ' + frame.headers['message']);
-            console.error('Additional details: ' + frame.body);
-            if (onError) onError(frame);
-        };
-
-        this.stompClient.activate();
-    }
-
-    subscribe(destination, callback) {
-        if (!this.connected) return null;
-
-        // Prevent duplicate subscriptions
-        if (this.subscriptions.has(destination)) {
-            this.subscriptions.get(destination).unsubscribe();
-        }
-
-        const subscription = this.stompClient.subscribe(destination, (message) => {
-            callback(JSON.parse(message.body));
+            this.socket.emit('authenticate', { userId });
+            if (onConnected) onConnected();
+            console.log('[Socket.IO] Connected');
         });
 
-        this.subscriptions.set(destination, subscription);
-        return subscription;
+        this.socket.on('connect_error', (err) => {
+            console.error('[Socket.IO] Connection error:', err.message);
+            this.connected = false;
+            if (onError) onError(err);
+        });
+
+        this.socket.on('disconnect', (reason) => {
+            this.connected = false;
+            console.log('[Socket.IO] Disconnected:', reason);
+        });
+
+        this.socket.on('reconnect', (attemptNumber) => {
+            console.log(`[Socket.IO] Reconnected after ${attemptNumber} attempts`);
+            this.connected = true;
+            // Re-authenticate after reconnection
+            this.socket.emit('authenticate', { userId: this.userId });
+        });
+
+        this.socket.on('error', (error) => {
+            console.error('[Socket.IO] Server error:', error);
+        });
+
+        // Route all events to registered handlers
+        this.socket.onAny((event, ...args) => {
+            if (this.handlers.has(event)) {
+                this.handlers.get(event).forEach(cb => cb(...args));
+            }
+        });
     }
 
-    sendMessage(destination, body) {
-        if (this.stompClient && this.connected) {
-            this.stompClient.publish({
-                destination: destination,
-                body: JSON.stringify(body)
-            });
+    subscribe(event, callback) {
+        if (!this.handlers.has(event)) {
+            this.handlers.set(event, new Set());
+        }
+        this.handlers.get(event).add(callback);
+
+        // Return unsubscribe function
+        return () => {
+            const set = this.handlers.get(event);
+            if (set) {
+                set.delete(callback);
+                if (set.size === 0) this.handlers.delete(event);
+            }
+        };
+    }
+
+    emit(event, payload) {
+        if (this.socket?.connected) {
+            this.socket.emit(event, payload);
+        } else {
+            console.warn(`[Socket.IO] Cannot emit '${event}' — not connected`);
         }
     }
 
     disconnect() {
-        if (this.stompClient && this.connected) {
-            this.subscriptions.forEach(sub => sub.unsubscribe());
-            this.subscriptions.clear();
-            this.stompClient.deactivate();
+        if (this.socket) {
+            this.socket.disconnect();
+            this.socket = null;
             this.connected = false;
+            this.handlers.clear();
+            this.userId = null;
         }
     }
 }

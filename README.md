@@ -1,53 +1,199 @@
-# SecureChat – Quantum Neural Network (PWA)
+# SecureChat — Real-Time Encrypted Messenger
 
-SecureChat is a production-grade, end-to-end encrypted (E2EE) real-time messaging Progressive Web App. It features a unified codebase for web and mobile, premium glassmorphic aesthetics, and military-grade security protocols.
+A full-stack real-time chat application with end-to-end encryption, built with a modern JavaScript stack.
 
-## 🚀 Key Features
-- **End-to-End Encryption (E2EE)**: Client-side RSA-2048 (Key Exchange) + AES-2048-GCM (Payload).
-- **Quantum UI**: Premium 'Neural' dark theme with glassmorphism and mobile-responsive drawer.
-- **Progressive Web App (PWA)**: Installable on Android, iOS, and Desktop with offline caching.
-- **Real-Time Synergy**: Low-latency messaging, typing indicators, and presence tracking via STOMP WebSockets.
-- **Tactical Media**: Encrypted transfers for Images, PDFs, Voice Notes, and Documents.
-- **Visual Privacy**: Automatic message scrambling with "Quantum Peek" functionality.
+## 🏗 Tech Stack
 
-## 🏗️ Architecture Stack
-- **Frontend**: React (Vite) + Material UI (MUI) + `node-forge` (Crypto)
-- **Backend**: Java 17 + Spring Boot 3 + Spring Security (JWT)
-- **Database**: MongoDB (Atlas)
-- **Storage**: Cloudinary (Encrypted Media)
+| Layer           | Technology                        |
+|-----------------|-----------------------------------|
+| **Frontend**    | React 18 + Vite + MUI            |
+| **Backend**     | Node.js + Express                 |
+| **Real-Time**   | Socket.IO                         |
+| **Database**    | MongoDB (Mongoose ODM)            |
+| **Cache**       | Redis (with in-memory fallback)   |
+| **Auth**        | JWT + Google OAuth 2.0            |
+| **Encryption**  | RSA-2048 + AES-256-GCM (E2EE)    |
+| **Media**       | Cloudinary (CDN uploads)          |
+| **PWA**         | Vite PWA Plugin + Service Worker  |
+| **Deployment**  | Render (render.yaml)              |
 
-## 🛠️ Local Development
+## 📂 Project Structure
+
+```
+RealTimeChat/
+├── backend_node/                # Node.js + Express API Server
+│   ├── src/
+│   │   ├── config/
+│   │   │   ├── db.js            # MongoDB connection
+│   │   │   └── redis.js         # Redis + memory fallback
+│   │   ├── controllers/
+│   │   │   ├── authController.js     # Google OAuth + JWT
+│   │   │   ├── chatController.js     # Chat CRUD + Groups
+│   │   │   ├── messageController.js  # Messages + Pagination
+│   │   │   ├── userController.js     # User search + profile
+│   │   │   └── mediaController.js    # Cloudinary uploads
+│   │   ├── middleware/
+│   │   │   └── authMiddleware.js     # JWT verification
+│   │   ├── models/
+│   │   │   ├── User.js
+│   │   │   ├── Chat.js
+│   │   │   └── Message.js
+│   │   ├── routes/
+│   │   │   └── api.js           # Express router
+│   │   └── index.js             # Server entry + Socket.IO
+│   ├── .env                     # Environment variables
+│   └── package.json
+├── frontend/                    # React + Vite Frontend
+│   ├── public/
+│   │   ├── icon-512.png         # PWA icon
+│   │   ├── manifest.json        # PWA manifest
+│   │   └── sw.js                # Service worker
+│   ├── src/
+│   │   ├── components/
+│   │   │   ├── BackgroundVideo.jsx
+│   │   │   └── InstallPWA.jsx
+│   │   ├── context/
+│   │   │   ├── AuthContext.jsx  # Auth state + JWT
+│   │   │   └── ChatContext.jsx  # Chat state + Socket.IO
+│   │   ├── pages/
+│   │   │   ├── Welcome.jsx      # Landing page
+│   │   │   ├── Login.jsx        # Google OAuth login
+│   │   │   ├── Register.jsx     # Registration
+│   │   │   └── ChatPage.jsx     # Main chat UI
+│   │   ├── services/
+│   │   │   ├── api.js           # Axios HTTP client
+│   │   │   ├── socket.js        # Socket.IO client
+│   │   │   └── notification.js  # Browser notifications
+│   │   ├── utils/
+│   │   │   └── encryption.js    # RSA + AES encryption
+│   │   ├── theme.js             # MUI dark theme
+│   │   ├── index.css            # Global styles
+│   │   ├── App.jsx              # Routes + providers
+│   │   └── main.jsx             # Entry point
+│   ├── index.html
+│   ├── vite.config.js
+│   └── package.json
+└── render.yaml                  # Deployment config
+```
+
+## 🚀 Getting Started
+
+### Prerequisites
+
+- **Node.js** >= 18
+- **MongoDB** (local or Atlas)
+- **Redis** (optional — falls back to in-memory)
+- **Google Cloud Console** project with OAuth 2.0 credentials
 
 ### 1. Backend Setup
-1. Ensure JDK 17 and MongoDB are installed.
-2. Configure credentials in `backend/src/main/resources/application.properties`.
-3. Run:
-   ```bash
-   cd backend
-   mvn clean spring-boot:run
-   ```
+
+```bash
+cd backend_node
+npm install
+```
+
+Create `.env` (already provided with defaults):
+
+```env
+PORT=8080
+MONGODB_URI=mongodb://localhost:27017/securechat
+JWT_SECRET=your-secret-key
+CLOUDINARY_CLOUD_NAME=your-cloud
+CLOUDINARY_API_KEY=your-key
+CLOUDINARY_API_SECRET=your-secret
+CORS_ORIGINS=http://localhost:5173
+GOOGLE_CLIENT_ID=your-google-client-id
+REDIS_URL=redis://localhost:6379
+```
+
+Start the server:
+
+```bash
+npm run dev
+```
 
 ### 2. Frontend Setup
-1. Ensure Node.js 18+ is installed.
-2. Run:
-   ```bash
-   cd frontend
-   npm install
-   npm run dev
-   ```
 
-## 🌐 Production Deployment (Render)
+```bash
+cd frontend
+npm install
+```
 
-### Backend (Web Service)
-- **Runtime**: Docker
-- **Build Command**: `mvn clean install -DskipTests`
-- **Start Command**: `java -jar target/backend-0.0.1-SNAPSHOT.jar`
-- **Envars**: `MONGODB_URI`, `JWT_SECRET`, `CLOUDINARY_URL`, `CORS_ORIGINS`.
+Create `.env` in the frontend folder:
 
-### Frontend (Static Site)
-- **Build Command**: `cd frontend && npm install && npm run build`
-- **Publish Directory**: `frontend/dist`
-- **Envars**: `VITE_API_URL`, `VITE_WS_URL`.
+```env
+VITE_API_URL=http://localhost:8080/api
+VITE_WS_URL=http://localhost:8080
+VITE_GOOGLE_CLIENT_ID=your-google-client-id
+```
 
----
-*Identity verified. Neural link active.*
+Start the dev server:
+
+```bash
+npm run dev
+```
+
+### 3. Open the App
+
+Navigate to `http://localhost:5173` in your browser.
+
+## 🔐 Security Features
+
+- **End-to-End Encryption**: All messages are encrypted client-side using RSA-2048 + AES-256-GCM
+- **Zero-Knowledge Architecture**: Private keys never leave the user's device
+- **JWT Authentication**: Stateless auth with auto-refresh
+- **Helmet.js**: HTTP security headers
+- **Rate Limiting**: API protection against abuse
+- **CORS**: Whitelisted origins only
+
+## 📡 Real-Time Features
+
+- **Instant messaging** via Socket.IO WebSockets
+- **Presence tracking** (online/offline)
+- **Typing indicators** and voice recording status
+- **Read receipts** (sent → delivered → read)
+- **Emoji reactions** on messages
+- **Multi-device support** (multiple sockets per user)
+
+## 🎨 Frontend Features
+
+- **Progressive Web App** — installable, offline-capable
+- **Material UI** dark cyberpunk theme
+- **Responsive design** — mobile-first with drawer sidebar
+- **Media uploads** — images, files, voice messages
+- **Group chats** with member management
+- **Visual encryption** — messages auto-encrypt after 30s
+- **Chat wallpapers** — customizable per chat
+
+## 📬 API Endpoints
+
+| Method | Endpoint                      | Description              |
+|--------|-------------------------------|--------------------------|
+| POST   | `/api/auth/google`            | Google OAuth login       |
+| POST   | `/api/auth/test`              | Test account login       |
+| GET    | `/api/auth/me`                | Get current user         |
+| GET    | `/api/users/search?email=`    | Search users             |
+| GET    | `/api/users/:id`              | Get user by ID           |
+| PUT    | `/api/users/profile`          | Update profile           |
+| GET    | `/api/chats`                  | Get user's chats         |
+| POST   | `/api/chats/:userId`          | Create/get direct chat   |
+| DELETE | `/api/chats/:chatId`          | Delete chat              |
+| POST   | `/api/groups/create`          | Create group chat        |
+| GET    | `/api/messages/:chatId`       | Get messages (paginated) |
+| DELETE | `/api/messages/:messageId`    | Delete message           |
+| POST   | `/api/messages/:chatId/read`  | Mark as read             |
+| POST   | `/api/media/upload`           | Upload media file        |
+
+## 🔌 Socket.IO Events
+
+| Event            | Direction      | Description                |
+|------------------|----------------|----------------------------|
+| `authenticate`   | Client → Server | Auth with userId           |
+| `joinChat`       | Client → Server | Join a chat room           |
+| `sendMessage`    | Client → Server | Send encrypted message     |
+| `receiveMessage` | Server → Client | Receive new message        |
+| `activity`       | Bidirectional   | Typing/recording status    |
+| `reaction`       | Bidirectional   | Emoji reaction on message  |
+| `presence`       | Server → Client | User online/offline        |
+| `messagesRead`   | Server → Client | Read receipt notification  |
+| `markRead`       | Client → Server | Mark messages as read      |

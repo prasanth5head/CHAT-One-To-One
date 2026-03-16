@@ -1,20 +1,21 @@
 services:
-  # ─── Backend: Spring Boot Web Service ───────────────────────────────────────
+  # ─── Backend: Node.js + Express + Socket.IO ──────────────────────────────────
   - type: web
     name: securechat-backend
-    runtime: docker
-    dockerfilePath: ./backend/Dockerfile
-    dockerContext: ./backend
+    runtime: node
     plan: free
+    rootDir: ./backend_node
+    buildCommand: npm install
+    startCommand: npm start
     envVars:
+      - key: NODE_ENV
+        value: production
       - key: PORT
         value: 8080
       - key: MONGODB_URI
-        sync: false           # You will fill this in the Render dashboard
+        sync: false           # Set in Render dashboard
       - key: JWT_SECRET
-        sync: false           # You will fill this in the Render dashboard
-      - key: JWT_EXPIRATION
-        value: 86400000
+        sync: false           # Set in Render dashboard
       - key: CLOUDINARY_CLOUD_NAME
         sync: false
       - key: CLOUDINARY_API_KEY
@@ -22,10 +23,14 @@ services:
       - key: CLOUDINARY_API_SECRET
         sync: false
       - key: CORS_ORIGINS
-        sync: false           # Set to your frontend URL after frontend is deployed
-    healthCheckPath: /actuator/health
+        sync: false           # Set to your frontend URL
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: REDIS_URL
+        sync: false           # Set to your Redis instance URL
+    healthCheckPath: /health
 
-  # ─── Frontend: React Static Site ─────────────────────────────────────────────
+  # ─── Frontend: React + Vite Static Site ──────────────────────────────────────
   - type: web
     name: securechat-frontend
     runtime: static
@@ -38,7 +43,7 @@ services:
       - key: VITE_API_URL
         sync: false           # Set to your backend URL + /api
       - key: VITE_WS_URL
-        sync: false           # Set to your backend URL + /ws
+        sync: false           # Set to your backend URL (root, no /ws)
     headers:
       - path: /*
         name: X-Frame-Options
@@ -46,6 +51,9 @@ services:
       - path: /*
         name: X-Content-Type-Options
         value: nosniff
+      - path: /*
+        name: X-XSS-Protection
+        value: "1; mode=block"
     routes:
       - type: rewrite
         source: /*

@@ -2,7 +2,6 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
-// https://vite.dev/config/
 export default defineConfig({
   plugins: [
     react(),
@@ -43,9 +42,7 @@ export default defineConfig({
         ]
       },
       workbox: {
-        // Cache static assets (JS, CSS, images) on first load
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
-        // Network-first for API calls so we always get fresh data when online
         runtimeCaching: [
           {
             urlPattern: ({ url }) => url.pathname.startsWith('/api'),
@@ -67,7 +64,6 @@ export default defineConfig({
         ]
       },
       devOptions: {
-        // Enable service worker in dev mode for testing
         enabled: false
       }
     })
@@ -79,13 +75,23 @@ export default defineConfig({
         manualChunks: {
           mui: ['@mui/material', '@mui/icons-material', '@emotion/react', '@emotion/styled'],
           vendor: ['react', 'react-dom', 'react-router-dom'],
-          libs: ['node-forge', '@stomp/stompjs', 'sockjs-client', 'axios'],
+          libs: ['node-forge', 'axios', 'socket.io-client'],
         }
       }
     }
   },
   server: {
     historyApiFallback: true,
+    proxy: {
+      '/api': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
+      },
+      '/socket.io': {
+        target: 'http://localhost:8080',
+        ws: true,
+        changeOrigin: true,
+      }
+    }
   }
 })
-
