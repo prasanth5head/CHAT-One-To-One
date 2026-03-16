@@ -28,6 +28,7 @@ import {
     Done as DoneIcon,
     DoneAll as DoneAllIcon,
     Add as AddIcon,
+    PersonAdd as PersonAddIcon,
     AttachFile as FileIcon,
     Description as DocumentIcon,
     PlayArrow as PlayIcon,
@@ -246,6 +247,34 @@ export default function ChatPage() {
                     }} 
                 />
             </Box>
+
+            {/* ── Search Results ─────────────────────────────────────────────────── */}
+            {searchEmail.length > 0 && (
+                <List sx={{ bgcolor: 'rgba(0,229,255,0.05)', borderBottom: '1px solid rgba(0,229,255,0.1)' }}>
+                    {searchResults.length > 0 ? searchResults.map(u => (
+                        <ListItem key={u.id || u._id} button onClick={async () => { await createChat(u); setSearchEmail(""); setSearchResults([]); }}>
+                            <ListItemAvatar><Avatar src={u.avatar} /></ListItemAvatar>
+                            <ListItemText primary={u.displayName || u.name} secondary={u.email} />
+                        </ListItem>
+                    )) : (
+                        searchEmail.endsWith("@test.com") && (
+                            <ListItem button onClick={async () => { 
+                                // Virtual user for @test.com accounts that haven't logged in yet
+                                await createChat({ id: searchEmail, email: searchEmail, name: searchEmail.split('@')[0] }); 
+                                setSearchEmail(""); 
+                            }}>
+                                <ListItemAvatar><Avatar sx={{ bgcolor: '#00e5ff', color: '#000' }}><PersonAddIcon /></Avatar></ListItemAvatar>
+                                <ListItemText primary="Summon Neural Identity" secondary={`Connect with ${searchEmail}`} />
+                            </ListItem>
+                        )
+                    )}
+                    {searchResults.length === 0 && !searchEmail.endsWith("@test.com") && (
+                        <Typography variant="caption" sx={{ p: 2, display: 'block', opacity: 0.5, textAlign: 'center' }}>
+                            No identities found.
+                        </Typography>
+                    )}
+                </List>
+            )}
 
             <List sx={{ flex: 1, overflowY: 'auto', p: 1 }}>
                 {chats.map(chat => {
