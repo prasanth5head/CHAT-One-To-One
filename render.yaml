@@ -46,6 +46,12 @@ services:
         sync: false           # Set to your backend URL (root, no /ws)
     headers:
       - path: /*
+        name: Cross-Origin-Opener-Policy
+        value: same-origin-allow-popups
+      - path: /*
+        name: Cross-Origin-Embedder-Policy
+        value: unsafe-none
+      - path: /*
         name: X-Frame-Options
         value: DENY
       - path: /*

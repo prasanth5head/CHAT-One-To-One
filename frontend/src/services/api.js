@@ -4,7 +4,7 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api';
 
 export const api = axios.create({
     baseURL: API_URL,
-    timeout: 15000,
+    timeout: 60000, // Increased to 60s to handle Render free-tier cold starts
 });
 
 // Automatically attach JWT to all outgoing requests
